@@ -8,7 +8,7 @@ munging: TRUE
 logging: FALSE
 logging_level: INFO
 load_libraries: TRUE
-libraries: reshape2, plyr, tidyverse, stringr, lubridate, lattice, janitor, skimr
+libraries: reshape2, plyr, tidyverse, stringr, lubridate, lattice, janitor, skimr, auditor, modelDown
 as_factors: TRUE
 data_tables: FALSE
 attach_internal_libraries: FALSE
