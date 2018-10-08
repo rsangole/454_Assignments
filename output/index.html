@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+  <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u"
+    crossorigin="anonymous">
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa"
+    crossorigin="anonymous"></script>
+  <link href="https://maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css" rel="stylesheet" integrity="sha384-T8Gy5hrqNKT+hzMclPo118YTQO6cYprQmhrYwIiQ/3axmI1hQomh7Ud2hPOy8SP1"
+    crossorigin="anonymous">
+
+  <link rel="stylesheet" type="text/css" href="style.css">
+</head>
+
+<body>
+
+  <div class="container template-home">
+
+    <header>
+      <div class="navbar navbar-default navbar-fixed-top navbar-mi2" role="navigation">
+        <div class="container">
+          <div class="navbar-header">
+            <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar">
+              <span class="icon-bar"></span>
+              <span class="icon-bar"></span>
+              <span class="icon-bar"></span>
+            </button>
+            </a>
+            <a class="navbar-brand navbar-mi2" href="index.html">modelDown</a>
+          </div>
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-mi2 nav navbar-nav">
+              <li>
+                <a href="index.html">
+                  <span class="fa fa-home fa-lg"></span>
+
+                </a>
+              </li>
+
+              <li>
+                  <a href="model_performance.html">Model Performance</a>
+              </li>
+              <li>
+                  <a href="variable_importance.html">Variable Importance</a>
+              </li>
+              <li>
+                  <a href="variable_response.html">Variable Response</a>
+              </li>
+              <li>
+                  <a href="prediction_breakdown.html">Prediction BreakDown</a>
+              </li>
+            </ul>
+            <ul class="nav navbar-nav navbar-right"></ul>
+          </div>
+          <!--/.nav-collapse -->
+        </div>
+        <!--/.container -->
+      </div>
+      <!--/.navbar -->
+    </header>
+
+    <div class="row" style="position: relative; margin-bottom:60px;">
+      <header class="bg-primary text-white">
+  <div class="container text-center">
+    <h1>modelDown</h1>
+    <p class="lead">Explore your model!</p>
+  </div>
+</header>
+
+<br>
+<br>
+
+<div class="row">
+  <div class="col-md-8">
+    <h3 class="my-3">Basic data information</h3>
+    <ul>
+      <li>425 observations</li>
+      <li>7 columns</li>
+    </ul>
+  </div>
+  <div class="col-md-4" >
+    <h3 class="my-3">Explainers</h3>
+      <ul><li>lm <a href='explainers/lm.rda'>(download)</a></li></ul>
+  </div>
+</div>
+
+<hr>
+
+<div class="text-center">
+  <h3 class="my-3">Summaries for numerical variables</h3>
+  <br>
+  <table class="table table-responsive table-bordered table-hover" style="margin-left: auto; margin-right: auto;">
+ <thead>
+  <tr>
+   <th style="text-align:left;">   </th>
+   <th style="text-align:right;"> vars </th>
+   <th style="text-align:right;"> n </th>
+   <th style="text-align:right;"> mean </th>
+   <th style="text-align:right;"> sd </th>
+   <th style="text-align:right;"> median </th>
+   <th style="text-align:right;"> trimmed </th>
+   <th style="text-align:right;"> mad </th>
+   <th style="text-align:right;"> min </th>
+   <th style="text-align:right;"> max </th>
+   <th style="text-align:right;"> range </th>
+   <th style="text-align:right;"> skew </th>
+   <th style="text-align:right;"> kurtosis </th>
+   <th style="text-align:right;"> se </th>
+  </tr>
+ </thead>
+<tbody>
+  <tr>
+   <td style="text-align:left;"> price </td>
+   <td style="text-align:right;"> 1 </td>
+   <td style="text-align:right;"> 425 </td>
+   <td style="text-align:right;"> 6355.992941 </td>
+   <td style="text-align:right;"> 4404.2373762 </td>
+   <td style="text-align:right;"> 5476.00 </td>
+   <td style="text-align:right;"> 5699.307918 </td>
+   <td style="text-align:right;"> 3154.972800 </td>
+   <td style="text-align:right;"> 497.0 </td>
+   <td style="text-align:right;"> 27575.00 </td>
+   <td style="text-align:right;"> 27078.00 </td>
+   <td style="text-align:right;"> 1.7115855 </td>
+   <td style="text-align:right;"> 3.7690901 </td>
+   <td style="text-align:right;"> 213.6368930 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> carat </td>
+   <td style="text-align:right;"> 2 </td>
+   <td style="text-align:right;"> 425 </td>
+   <td style="text-align:right;"> 1.040685 </td>
+   <td style="text-align:right;"> 0.4219665 </td>
+   <td style="text-align:right;"> 1.02 </td>
+   <td style="text-align:right;"> 1.009199 </td>
+   <td style="text-align:right;"> 0.400302 </td>
+   <td style="text-align:right;"> 0.2 </td>
+   <td style="text-align:right;"> 2.48 </td>
+   <td style="text-align:right;"> 2.28 </td>
+   <td style="text-align:right;"> 0.7033396 </td>
+   <td style="text-align:right;"> 0.4280828 </td>
+   <td style="text-align:right;"> 0.0204684 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> color </td>
+   <td style="text-align:right;"> 3 </td>
+   <td style="text-align:right;"> 425 </td>
+   <td style="text-align:right;"> 4.312941 </td>
+   <td style="text-align:right;"> 1.8641218 </td>
+   <td style="text-align:right;"> 4.00 </td>
+   <td style="text-align:right;"> 4.310850 </td>
+   <td style="text-align:right;"> 2.965200 </td>
+   <td style="text-align:right;"> 1.0 </td>
+   <td style="text-align:right;"> 9.00 </td>
+   <td style="text-align:right;"> 8.00 </td>
+   <td style="text-align:right;"> -0.0142634 </td>
+   <td style="text-align:right;"> -0.7696130 </td>
+   <td style="text-align:right;"> 0.0904232 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> clarity </td>
+   <td style="text-align:right;"> 4 </td>
+   <td style="text-align:right;"> 425 </td>
+   <td style="text-align:right;"> 6.134118 </td>
+   <td style="text-align:right;"> 1.6043538 </td>
+   <td style="text-align:right;"> 6.00 </td>
+   <td style="text-align:right;"> 6.193548 </td>
+   <td style="text-align:right;"> 1.482600 </td>
+   <td style="text-align:right;"> 2.0 </td>
+   <td style="text-align:right;"> 10.00 </td>
+   <td style="text-align:right;"> 8.00 </td>
+   <td style="text-align:right;"> -0.3037722 </td>
+   <td style="text-align:right;"> -0.1676559 </td>
+   <td style="text-align:right;"> 0.0778226 </td>
+  </tr>
+</tbody>
+</table>
+  <hr>
+    <h3 class="my-3">Summaries for categorical variables</h3>
+    <br><table class="table table-responsive table-bordered table-hover" style="width: auto !important; margin-left: auto; margin-right: auto;">
+ <thead>
+  <tr>
+   <th style="text-align:left;"> cut </th>
+   <th style="text-align:right;"> Frequency </th>
+  </tr>
+ </thead>
+<tbody>
+  <tr>
+   <td style="text-align:left;"> Ideal </td>
+   <td style="text-align:right;"> 154 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Not Ideal </td>
+   <td style="text-align:right;"> 271 </td>
+  </tr>
+</tbody>
+</table><br><table class="table table-responsive table-bordered table-hover" style="width: auto !important; margin-left: auto; margin-right: auto;">
+ <thead>
+  <tr>
+   <th style="text-align:left;"> channel </th>
+   <th style="text-align:right;"> Frequency </th>
+  </tr>
+ </thead>
+<tbody>
+  <tr>
+   <td style="text-align:left;"> Independent </td>
+   <td style="text-align:right;"> 48 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Internet </td>
+   <td style="text-align:right;"> 318 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Mall </td>
+   <td style="text-align:right;"> 59 </td>
+  </tr>
+</tbody>
+</table><br><table class="table table-responsive table-bordered table-hover" style="width: auto !important; margin-left: auto; margin-right: auto;">
+ <thead>
+  <tr>
+   <th style="text-align:left;"> store </th>
+   <th style="text-align:right;"> Frequency </th>
+  </tr>
+ </thead>
+<tbody>
+  <tr>
+   <td style="text-align:left;"> Ashford </td>
+   <td style="text-align:right;"> 107 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Ausmans </td>
+   <td style="text-align:right;"> 7 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Blue Nile </td>
+   <td style="text-align:right;"> 211 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Chalmers </td>
+   <td style="text-align:right;"> 8 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Danford </td>
+   <td style="text-align:right;"> 9 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Fred Meyer </td>
+   <td style="text-align:right;"> 15 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Goodmans </td>
+   <td style="text-align:right;"> 11 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Kay </td>
+   <td style="text-align:right;"> 14 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> R. Holland </td>
+   <td style="text-align:right;"> 7 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Riddles </td>
+   <td style="text-align:right;"> 16 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> University </td>
+   <td style="text-align:right;"> 13 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Zales </td>
+   <td style="text-align:right;"> 7 </td>
+  </tr>
+</tbody>
+</table>
+</div>
+
+<br>
+<br>
+    </div>
+
+
+  <footer>
+    <div class="footer">
+      <div class="text-center">Site built with <a href="https://github.com/MI2DataLab/modelDown">modelDown</a>.</div>
+      <div class="text-center" style="margin: 0px 0px 5px;">Last updated: 2018-10-07 19:13:49</div>
+    </div>
+  </footer>
+
+  </div>
+
+</body>
+</html>

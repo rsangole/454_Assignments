@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+  <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u"
+    crossorigin="anonymous">
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa"
+    crossorigin="anonymous"></script>
+  <link href="https://maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css" rel="stylesheet" integrity="sha384-T8Gy5hrqNKT+hzMclPo118YTQO6cYprQmhrYwIiQ/3axmI1hQomh7Ud2hPOy8SP1"
+    crossorigin="anonymous">
+
+  <link rel="stylesheet" type="text/css" href="style.css">
+</head>
+
+<body>
+
+  <div class="container template-home">
+
+    <header>
+      <div class="navbar navbar-default navbar-fixed-top navbar-mi2" role="navigation">
+        <div class="container">
+          <div class="navbar-header">
+            <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar">
+              <span class="icon-bar"></span>
+              <span class="icon-bar"></span>
+              <span class="icon-bar"></span>
+            </button>
+            </a>
+            <a class="navbar-brand navbar-mi2" href="index.html">modelDown</a>
+          </div>
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-mi2 nav navbar-nav">
+              <li>
+                <a href="index.html">
+                  <span class="fa fa-home fa-lg"></span>
+
+                </a>
+              </li>
+
+              <li>
+                  <a href="model_performance.html">Model Performance</a>
+              </li>
+              <li>
+                  <a href="variable_importance.html">Variable Importance</a>
+              </li>
+              <li>
+                  <a href="variable_response.html">Variable Response</a>
+              </li>
+              <li>
+                  <a href="prediction_breakdown.html">Prediction BreakDown</a>
+              </li>
+            </ul>
+            <ul class="nav navbar-nav navbar-right"></ul>
+          </div>
+          <!--/.nav-collapse -->
+        </div>
+        <!--/.container -->
+      </div>
+      <!--/.navbar -->
+    </header>
+
+    <div class="row" style="position: relative; margin-bottom:60px;">
+      <div style="position: fixed; width: 300px;">
+    <div class="panel panel-default">
+        <ul class="list-group">
+            <li class="list-group-item" style="padding: 5px 15px;">
+                <a href="#carat">carat</a>
+            </li>
+            <li class="list-group-item" style="padding: 5px 15px;">
+                <a href="#channel">channel</a>
+            </li>
+            <li class="list-group-item" style="padding: 5px 15px;">
+                <a href="#clarity">clarity</a>
+            </li>
+            <li class="list-group-item" style="padding: 5px 15px;">
+                <a href="#color">color</a>
+            </li>
+            <li class="list-group-item" style="padding: 5px 15px;">
+                <a href="#cut">cut</a>
+            </li>
+            <li class="list-group-item" style="padding: 5px 15px;">
+                <a href="#price">price</a>
+            </li>
+            <li class="list-group-item" style="padding: 5px 15px;">
+                <a href="#store">store</a>
+            </li>
+        </ul>
+    </div>
+</div>
+<div class="col-md-push-3 col-md-9" style="left: 300px; width: auto;">
+    <a id="carat" style="display: block;position: relative;top: -51px;visibility: hidden;"></a>
+    <div style="padding: 0px 20px;">
+        <h2>carat</h2>
+        <img src="img/variable_response_carat_pdp.png" />
+    </div>
+    <a id="channel" style="display: block;position: relative;top: -51px;visibility: hidden;"></a>
+    <div style="padding: 0px 20px;">
+        <h2>channel</h2>
+        <img src="img/variable_response_channel_pdp.png" />
+    </div>
+    <a id="clarity" style="display: block;position: relative;top: -51px;visibility: hidden;"></a>
+    <div style="padding: 0px 20px;">
+        <h2>clarity</h2>
+        <img src="img/variable_response_clarity_pdp.png" />
+    </div>
+    <a id="color" style="display: block;position: relative;top: -51px;visibility: hidden;"></a>
+    <div style="padding: 0px 20px;">
+        <h2>color</h2>
+        <img src="img/variable_response_color_pdp.png" />
+    </div>
+    <a id="cut" style="display: block;position: relative;top: -51px;visibility: hidden;"></a>
+    <div style="padding: 0px 20px;">
+        <h2>cut</h2>
+        <img src="img/variable_response_cut_pdp.png" />
+    </div>
+    <a id="price" style="display: block;position: relative;top: -51px;visibility: hidden;"></a>
+    <div style="padding: 0px 20px;">
+        <h2>price</h2>
+        <img src="img/variable_response_price_pdp.png" />
+    </div>
+    <a id="store" style="display: block;position: relative;top: -51px;visibility: hidden;"></a>
+    <div style="padding: 0px 20px;">
+        <h2>store</h2>
+        <img src="img/variable_response_store_pdp.png" />
+    </div>
+</div>
+    </div>
+
+
+  <footer>
+    <div class="footer">
+      <div class="text-center">Site built with <a href="https://github.com/MI2DataLab/modelDown">modelDown</a>.</div>
+      <div class="text-center" style="margin: 0px 0px 5px;">Last updated: 2018-10-07 19:13:48</div>
+    </div>
+  </footer>
+
+  </div>
+
+</body>
+</html>

@@ -15,6 +15,7 @@ bwplot(~price, df)
 splom(df[predictors] %>% sample_n(100))
 
 parallelplot(df, horizontal.axis = F)
+
 df %>%
   plot_ly(
     type = "parcoords",
@@ -71,7 +72,6 @@ df %>%
 # price~carat are mostly parallel lines, but there are intersections of lines indicating interaction terms
 # ternary plots show very interesting patterns!
 
-library("ggalluvial")
 is_alluvia_form(df)
 
 ggplot(aes(axis5 = cut, axis2 = color, axis4 = clarity, axis3 = channel, axis1 = store), data = df) +
