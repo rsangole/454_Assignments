@@ -28,7 +28,7 @@ df %>%
       list(values = ~as.numeric(carat), label = "carat"),
       list(values = ~as.numeric(cut), label = "cut", ticktext = levels(df$cut), tickvals = 1:length(levels(df$cut))),
       list(values = ~as.numeric(clarity), label = "clarity"),
-      list(values = ~as.numeric(color), label = "color"),
+      list(values = ~(10-as.numeric(color)), label = "color"),
       list(values = ~as.numeric(channel), label = "channel", ticktext = levels(df$channel), tickvals = 1:length(levels(df$channel))),
       list(values = ~as.numeric(store), label = "store", ticktext = levels(df$store), tickvals = 1:length(levels(df$store))),
       list(values = ~as.numeric(price), label = "price")
