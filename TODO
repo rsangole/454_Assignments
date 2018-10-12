@@ -1,0 +1,21 @@
+# Data
+[x] train test split
+[] interaction terms
+
+# Functions
+
+
+# Plotting
+[x] corrplot
+
+
+# Analysis
+
+[x] lm
+[] lm - best subsets
+[] lm - fwd
+[] lm - backward
+[] ridge
+[] lasso
+[] pcr + lm
+[] plsr

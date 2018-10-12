@@ -1,22 +1,22 @@
 library("ProjectTemplate")
 load.project()
 
-# Overall df and quality checks
-df
-skimr::skim(df)
-str(df)
+##---- Overall df_train and quality checks -----
+df_train
+skimr::skim(df_train)
+str(df_train)
 
-# Response
-summary(df[response])
-histogram(~price, df, breaks = 20)
-bwplot(~price, df)
+##---- Response ----
+summary(df_train[response])
+histogram(~price, df_train, breaks = 20)
+bwplot(~price, df_train)
 
-# Predictors
-splom(df[predictors] %>% sample_n(100))
+##----  Predictors ----
+splom(df_train[predictors] %>% sample_n(100))
 
-parallelplot(df, horizontal.axis = F)
+parallelplot(df_train, horizontal.axis = F)
 
-df %>%
+df_train %>%
   plot_ly(
     type = "parcoords",
     line = list(
@@ -26,11 +26,11 @@ df %>%
     ),
     dimensions = list(
       list(values = ~as.numeric(carat), label = "carat"),
-      list(values = ~as.numeric(cut), label = "cut", ticktext = levels(df$cut), tickvals = 1:length(levels(df$cut))),
+      list(values = ~as.numeric(cut), label = "cut", ticktext = levels(df_train$cut), tickvals = 1:length(levels(df_train$cut))),
       list(values = ~as.numeric(clarity), label = "clarity"),
       list(values = ~(10-as.numeric(color)), label = "color"),
-      list(values = ~as.numeric(channel), label = "channel", ticktext = levels(df$channel), tickvals = 1:length(levels(df$channel))),
-      list(values = ~as.numeric(store), label = "store", ticktext = levels(df$store), tickvals = 1:length(levels(df$store))),
+      list(values = ~as.numeric(channel), label = "channel", ticktext = levels(df_train$channel), tickvals = 1:length(levels(df_train$channel))),
+      list(values = ~as.numeric(store), label = "store", ticktext = levels(df_train$store), tickvals = 1:length(levels(df_train$store))),
       list(values = ~as.numeric(price), label = "price")
     )
   )
@@ -45,7 +45,7 @@ axis <- function(title) {
     ticklen = 5
   )
 }
-df %>%
+df_train %>%
   plot_ly(
     type = "scatterternary",
     a = ~carat,
@@ -72,45 +72,48 @@ df %>%
 # price~carat are mostly parallel lines, but there are intersections of lines indicating interaction terms
 # ternary plots show very interesting patterns!
 
-is_alluvia_form(df)
+is_alluvia_form(df_train)
 
-ggplot(aes(axis5 = cut, axis2 = color, axis4 = clarity, axis3 = channel, axis1 = store), data = df) +
+ggplot(aes(axis5 = cut, axis2 = color, axis4 = clarity, axis3 = channel, axis1 = store), data = df_train) +
   geom_alluvium(aes(fill = log(price)), width = 1 / 12) +
   geom_stratum(width = 1 / 15, fill = "black", color = "grey") +
   geom_label(stat = "stratum", label.strata = TRUE) +
   scale_x_discrete(limits = c("store", "color", "channel", "clarity", "cut"), expand = c(.05, .05))
 
 
-densityplot(~price, groups = cut, df, auto.key = T)
-densityplot(~price, groups = color, df, auto.key = T)
-densityplot(~price, groups = clarity, df, auto.key = T)
-densityplot(~price, groups = channel, df, auto.key = T)
-densityplot(~price, groups = store, df, auto.key = T)
+densityplot(~price, groups = cut, df_train, auto.key = T)
+densityplot(~price, groups = color, df_train, auto.key = T)
+densityplot(~price, groups = clarity, df_train, auto.key = T)
+densityplot(~price, groups = channel, df_train, auto.key = T)
+densityplot(~price, groups = store, df_train, auto.key = T)
 
-table(complete.cases(df))
+table(complete.cases(df_train))
 
-df %>%
+df_train %>%
     tabyl(color) %>%
     adorn_pct_formatting()
-df %>%
+df_train %>%
     tabyl(cut) %>%
     adorn_pct_formatting()
-df %>%
+df_train %>%
     tabyl(clarity) %>%
     adorn_pct_formatting()
-df %>%
+df_train %>%
     tabyl(channel) %>%
     adorn_pct_formatting()
-df %>%
+df_train %>%
     tabyl(store) %>%
     adorn_pct_formatting()
 
-bwplot(price~cut, df, xlab = 'cut')
-bwplot(price~channel, df, xlab = 'channel')
-bwplot(price~store, df, xlab = 'store')
-bwplot(price~as.factor(color), df, xlab = 'color')
-bwplot(price~as.factor(clarity), df, xlab = 'clarity')
-xyplot(price~carat,df,type=c('smooth','p'))
-xyplot(price~color,df,type=c('smooth','p'))
-xyplot(price~clarity,df,type=c('smooth','p'))
+bwplot(price~cut, df_train, xlab = 'cut')
+bwplot(price~channel, df_train, xlab = 'channel')
+bwplot(price~store, df_train, xlab = 'store')
+bwplot(price~as.factor(color), df_train, xlab = 'color')
+bwplot(price~as.factor(clarity), df_train, xlab = 'clarity')
+xyplot(price~carat,df_train,type=c('smooth','p'))
+xyplot(price~color,df_train,type=c('smooth','p'))
+xyplot(price~clarity,df_train,type=c('smooth','p'))
 
+#---- Correlation Plots ----
+cormat <- cor(df_train[,c('clarity','color','carat','price_sqrt')])
+corrplot::corrplot(cormat, method = 'number', type = 'lower', diag = F, order = 'hclust', number.cex = 2, tl.col = 'black')
