@@ -12,9 +12,9 @@
 # Analysis
 
 [x] lm
-[] lm - best subsets
-[] lm - fwd
-[] lm - backward
+[x] lm - best subsets
+[x] lm - fwd
+[x] lm - backward
 [] ridge
 [] lasso
 [] pcr + lm
