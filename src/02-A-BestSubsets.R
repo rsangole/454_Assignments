@@ -64,3 +64,38 @@ BIC(fit_fwd)
 fit_bkwd <- step(full, direction="backward")
 summary(fit_bkwd)
 BIC(fit_bkwd)
+
+
+## Lasso using glmnet ----
+##
+
+fit_glmnet <- glmnet(x = as.matrix(df_bsr_1[,-1]),
+                     y = as.matrix(df_bsr_1[,1]))
+plot(fit_glmnet, label = T)
+fit_glmnet_cv <- cv.glmnet(x = as.matrix(df_bsr_1[,-1]),
+                           y = as.matrix(df_bsr_1[,1]))
+plot(fit_glmnet_cv)
+(fit_glmnet_cv$lambda.min)
+(fit_glmnet_cv$lambda.1se)
+coef(fit_glmnet_cv, s = 'lambda.min')
+coef(fit_glmnet_cv, s = 'lambda.1se')
+
+preds_glmnet_cv <- predict(fit_glmnet_cv, s = 'lambda.1se', newx = as.matrix(df_bsr_1[,-1]))
+
+(glmnet_rmse <- (mean((df_bsr_1$price_sqrt - preds_glmnet_cv)^2))^0.5)
+(glmnet_mae <- (mean(abs(df_bsr_1$price_sqrt - preds_glmnet_cv)^2)))
+
+
+
+df_bsr_2 <- model.matrix(price_sqrt~(.)^2, df_bsr_1)[,-1]
+
+fit_glmnet_cv_2 <- cv.glmnet(x = as.matrix(df_bsr_2),
+                           y = as.matrix(df_bsr_1[,1]))
+plot(fit_glmnet_cv_2)
+(fit_glmnet_cv_2$lambda.min)
+(fit_glmnet_cv_2$lambda.1se)
+
+preds_glmnet_cv_2 <- predict(fit_glmnet_cv_2, s = 'lambda.1se', newx = as.matrix(df_bsr_2))
+
+(glmnet_rmse_2  <- (mean((df_bsr_1$price_sqrt - preds_glmnet_cv_2)^2))^0.5)
+(glmnet_mae_2 <- (mean(abs(df_bsr_1$price_sqrt - preds_glmnet_cv_2)^2)))
