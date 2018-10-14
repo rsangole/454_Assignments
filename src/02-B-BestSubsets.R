@@ -36,6 +36,9 @@ glimpse(df_bsr_1)
 
 df_bsr_1 <- df_bsr_1[-lin_combos_to_remove]
 
+df_bsr_scaled <- df_bsr_1[-1] %>% scale(center = T,scale = T) %>% as_tibble()
+df_bsr_scaled$price_sqrt <- df_bsr_1$price_sqrt
+
 (predictors_lm_1 <- names(df_bsr_1[-1]))
 
 fit_bsr_1 <- regsubsets(price_sqrt ~ ., df_bsr_1)
@@ -99,3 +102,27 @@ preds_glmnet_cv_2 <- predict(fit_glmnet_cv_2, s = 'lambda.1se', newx = as.matrix
 
 (glmnet_rmse_2  <- (mean((df_bsr_1$price_sqrt - preds_glmnet_cv_2)^2))^0.5)
 (glmnet_mae_2 <- (mean(abs(df_bsr_1$price_sqrt - preds_glmnet_cv_2)^2)))
+
+fit_glmnet_caret <- train(x = df_bsr_1[,-1],
+      y = df_bsr_1[[1]],
+      method = 'glmnet',
+      trControl = trainControl(method = 'cv'),
+      tuneGrid = expand.grid(alpha = c(0.1,0.5,1),
+                            lambda = seq(0, 0.2,by = 0.01)))
+fit_glmnet_caret
+plot(fit_glmnet_caret)
+plot(fit_glmnet_caret$finalModel)
+fit_glmnet_caret$bestTune
+
+
+fit_glmnet_scaled <- cv.glmnet(x = as.matrix(df_bsr_scaled[-17]),
+                             y = as.matrix(df_bsr_scaled[17]))
+plot(fit_glmnet_scaled)
+plot(fit_glmnet_scaled$glmnet.fit)
+(fit_glmnet_scaled$lambda.min)
+(fit_glmnet_scaled$lambda.1se)
+
+preds_glmnet_scaled <- predict(fit_glmnet_scaled, s = 'lambda.1se', newx = as.matrix(df_bsr_scaled[-17]))
+
+(glmnet_rmse_scaled <- (mean((df_bsr_1$price_sqrt - preds_glmnet_scaled)^2))^0.5)
+(glmnet_mae_scaled <- (mean(abs(df_bsr_1$price_sqrt - preds_glmnet_scaled)^2)))

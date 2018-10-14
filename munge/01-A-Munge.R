@@ -13,8 +13,7 @@ processing_code <- function(df) {
     # pca?
     df <- df[!duplicated(df), ]
     df %>%
-        mutate(price_log = log(price),
-               price_sqrt = sqrt(price))
+        mutate(price_sqrt = sqrt(price))
 
 }
 
