@@ -27,6 +27,8 @@ library('tidyverse')
 library('lattice')
 library('leaps')
 library('elasticnet')
+library('rpart')
+library('rpart.plot')
 library('latticeExtra')
 variables <- dir(path = '../cache', full.names = T, pattern = '.RData')
 purrr::walk(variables, ~load(.x,envir = .GlobalEnv))
@@ -59,8 +61,6 @@ The false color level plot attached in the appendix also shows that there are ve
 
 # Data Preparation
 
-The original data are split into a `train` and `test` split using a stratified 70:30 split. The stratification is performed on the `price` response variable, to ensure that the resulting distributions are similar in nature, as shown to the right. The splitting is carried out using `caret::createDataPartition()`.
-
 ```{r traintestsplit, fig.margin=TRUE, fig.width=4, fig.height=4, cache=TRUE, echo=FALSE, fig.cap='Density plots for the Train-Test split'}
 t1 <- df_train[,'price']
 t1$set <- 'train'
@@ -68,6 +68,8 @@ t2 <- df_test[,'price']
 t2$set <- 'test'
 t1 %>% bind_rows(t2) %>% lattice::densityplot(~price,groups=set,.,auto.key=T) 
 ```
+
+The original data are split into a `train` and `test` split using a stratified 70:30 split. The stratification is performed on the `price` response variable, to ensure that the resulting distributions are similar in nature, as shown to the right. The splitting is carried out using `caret::createDataPartition()`.
 
 The response variable is quite right skewed with a small number of observations (81) beyond the 80th percentile. This combined with residual analysis for the initial linear regression models showed the need to transform the response. Box-cox analysis is conducted which recommends a `lambda` value of 0.2. This is applied to `price` which makes the variable a lot more normally distributed, as shown the figure to the right. 
 
@@ -126,32 +128,35 @@ fit_fwd$finalModel %>% plot(scale='r2')
 
 ## Shrinkage models
 
-```{r ridge, fig.margin=TRUE, fig.show='hold', fig.width=4, fig.height=4, cache=TRUE, echo=FALSE, fig.cap = 'Ridge regression trace plot'}
-fit_ridge$finalModel %>% plot()
+```{r ridgecv, fig.margin=TRUE, fig.show='hold', fig.width=4, fig.height=2.5, cache=TRUE, echo=FALSE, fig.cap = 'Cross validation to fine tune the ridge regression parameter'}
+fit_ridge %>% plot()
 ```
 
 For lasso and ridge models, the dataset with interactions is used, since for the dataset without interactions, upon cross validation, no terms were eliminated for the dataset without interactions. The plot below shows the tranceplot for the variation in coefficients as the strength of regularization is changed for the ridge regression model. As expected `carat` has the strongest coefficient and is retained the longest, given it's strong correlation with the predictor. A large percentage of the remaining 100s of variables turn near zero. Cross validation is used to decide the hyperparameter.
 
-```{r ridgecv, fig.margin=FALSE, fig.show='hold', fig.width=6, fig.height=3.5, cache=TRUE, echo=FALSE, fig.cap = 'Cross validation to fine tune the ridge regression parameter'}
-fit_ridge %>% plot()
+```{r ridge, fig.margin=FALSE, fig.show='hold', fig.width=6, fig.height=4.5, cache=TRUE, echo=FALSE, fig.cap = 'Ridge regression trace plot'}
+fit_ridge$finalModel %>% plot()
 ```
 
 ## Tree models
 
 Two models are investigated in this section: a decision tree using `rpart`, and a conditional inference tree using `ctree`. For the `rpart` model, the decision tree obtained is shown here. As expected, `carat` is the dominant predictor, followed by `color` and `store`. The conditional trees are much more difficult to visually depict, though they performed much better than a simpler decision tree, as expected, since the simpler trees tend to have low bias and very high variance.
 
-```{r tree, echo=FALSE, fig.cap=, fig.fullwidth=TRUE, fig.height=4, fig.show='hold', fig.width=8, message=FALSE, warning=FALSE, cache=TRUE}
-library(rpart)
-library(rpart.plot)
-load('../cache/fit_rpart_1.RData',envir = .GlobalEnv)
-fit_rpart_1 %>% rpart.plot()
-```
+![rpart tree](rpart_tree_1way.png)
 
+\newpage
+
+```{r message=FALSE, warning=FALSE, fig.margin=TRUE, fig.show='hold', fig.width=4, fig.height=4, cache=TRUE, echo=FALSE, fig.cap = 'RF error as a function of number of trees'}
+library(randomForest)
+plot(fit_rf$finalModel, main='rf fit')
+```
 ## Random Forest models
 
-RF models are built using `caret` and the `randomForest` package. Although both datasets are used for RF models, the dataset with explicit interactions performed much worse. Hyperparameters were tuned via 10 fold cross validation. `mtry` which selects how many variables to randomly pick at each split was selected to be 16 (out of 19), while the number of random trees built in each model stablizes after ~150 trees. The CV search result is shown here which shows 16 parameters.
+RF models are built using `caret` and the `randomForest` package. Although both datasets are used for RF models, the dataset with explicit interactions performed much worse. Since trees can perform interactions without having to explicitely define them, the explicit definitions were simply adding unnecessary variables for the model to search through. 
 
-```{r message=FALSE, warning=FALSE, fig.margin=FALSE, fig.show='hold', fig.width=6, fig.height=3.5, cache=TRUE, echo=FALSE, fig.cap = 'Cross validation to fine tune the ridge regression parameter'}
+Hyperparameters were tuned via 10 fold cross validation. `mtry` which selects how many variables to randomly pick at each split was selected to be 16 (out of 19), while the number of random trees built in each model stablizes after ~150 trees. The CV search result is shown here which shows 16 parameters.
+
+```{r message=FALSE, warning=FALSE, fig.margin=FALSE, fig.show='hold', fig.width=6, fig.height=3, cache=TRUE, echo=FALSE, fig.cap = 'Cross validation to fine tune the ridge regression parameter'}
 plot(fit_rf)
 ```
 
@@ -163,20 +168,22 @@ In total, 10 models are built, each with 10-fold cross validation performed on t
 
 The advantage of running all the models using `caret` is that this package allows the user to easily compare the performance of all the models using various procedures. For example, the plot below shows the comparison of the two metrics MAE and RMSE for each model, for each of the 10 validation sets in a 10-fold cross validation. This is still on the training dataset, but _should_ be indicative of performance on the test dataset.  MAE and RMSE show very similar performance for roughly all the models, except the Random Forest models which show a higher RMSE than linear regression, vs RF models show a lower MAE than linear regression. Since MAE is less sensitive to outliers, the high RMSE is probably driven by some of the outliers identified earlier. The dotplot shows the point estimates and 95% error bars for the RSquared values. Here, Lasso and Backward selection models with 2nd order interactions score the highest.
 
-```{r resamps, fig.margin=TRUE, fig.show='hold', fig.width=4, fig.height=4, cache=TRUE, echo=FALSE, fig.cap='Comparison of the model performance for each of the 10 resamples in the 10-fold CV'}
+```{r resamps, fig.margin=FALSE, fig.show='hold', fig.width=8, fig.height=3.5, cache=TRUE, echo=FALSE, fig.cap='Comparison of the model performance for each of the 10 resamples in the 10-fold CV'}
 load('../cache/resamps_plot_1.RData')
 load('../cache/resamps_plot_3.RData')
 plot(resamps_plot_1)
 plot(resamps_plot_3)
 ```
 
+\newpage
+
 ## Test set performance
 
 The table below compares the performance of the models when applied on the test set, which so far has remained untouched throughout the modeling process. Now, we can see that the RF model is stored at the very top, though only by a very slim margin. Lasso and Ridge are in the lead as well, while linear regression (lowest training RMSE model) is now at position 6.
 
-```{r results_df, echo=FALSE, fig.cap='Test set performance, top 6 models by RSquared', message=FALSE, warning=FALSE, fig.height='70%'}
+```{r results_df, echo=FALSE, fig.cap='Test set performance, top 6 models by RSquared', message=FALSE, warning=FALSE}
 results_df %>% 
-    dplyr::select(modelNames, R2_test, RMSE_test, MAE_test) %>% 
+    dplyr::select(modelNames, R2_train, R2_test, RMSE_train, RMSE_test, MAE_train, MAE_test) %>% 
     arrange(-R2_test) %>% 
     slice(1:6) %>% 
     kable(caption='Results Compared', booktabs=T, digits=c(4,4,4)) %>% 
@@ -185,7 +192,7 @@ results_df %>%
 
 We can compare the relative performance of the models on point estimates of all three metrics for the training and testing runs. This will allow us to understand how much each model has tended to overfit to the training data. As expected, in all cases, test set performance is worse than the training set. In terms of the least gap between the training and test set performance, the Lasso model with 2nd order interaction has done the best. in terms of the absolute best predictive performance, the RF model (without explicit interaction terms included) has performed the best.
 
-```{r finalcomparison, fig.fullwidth=TRUE, fig.width=10, fig.height=4, cache=TRUE, echo=FALSE, fig.cap='Comparison of the final models on train and test datasets'}
+```{r finalcomparison, fig.fullwidth=TRUE, fig.width=9, fig.height=4, cache=TRUE, echo=FALSE, fig.cap='Comparison of the final models on train and test datasets'}
 p1 <- results_df %>%
     arrange(RMSE_test) %>%
     mutate(modelNames = factor(modelNames,levels = modelNames)) %>%
@@ -203,96 +210,99 @@ gridExtra::grid.arrange(p1,p2,p3,ncol=3)
 
 The scatter plot of the price prediction against the actual for both the datasets are shown here, which shows quite a strong perdictive performance. The model tends to deviate from truth at the extreme ends of the price spectrum, with stronger performance in the mid-section of price, where there are maximum number of points.
 
-```{r y_yhat, fig.margin = TRUE, fig.width=4, fig.height=4, cache=TRUE, echo=FALSE, fig.cap='RanForest performance, gray: train data, blue: test data'}
+```{r y_yhat, fig.margin = FALSE, fig.width=5, fig.height=5, cache=TRUE, echo=FALSE, fig.cap='Random Forest performance. Gray points show train data, blue points show test data.'}
+load('../cache/test_y_sqrt.RData')
+load('../cache/pred_test_rf.RData')
 xyplot(pred_test_rf~test_y_sqrt, xlab='Price', ylab='RF Price Prediction', lattice.options = ggplot2like.opts(),
 panel = function(...){panel.abline(c(0,1),col.line = 'red',lty=2);panel.xyplot(y=pred_train_rf,x=train_y_sqrt,col='gray',pch=3);panel.xyplot(...)})
 ```
 
 Since the objective of this assignment is purely predictive in nature, I would select the Random Forest model (with no explicit interactions).
 
+The entire codebase is stored on [github](https://github.com/rsangole/454_Assignments).
+
 \newpage
 
 # Appendix
 
-### Level plot
+## Level plot
+
 ```{r lvlplot, fig.fullwidth=TRUE, fig.width=8, fig.height=4, cache=TRUE, echo=FALSE, fig.cap='False color level plot showing that the few stores sell diamonds with a very high price'}
 load('../cache/lvlplot.RData')
 lvlplot
 ```
 
-### Linear model summary
+## Linear model summary
 
-```{r lmreg, echo=FALSE, fig.cap='Summary of linear model'}
-fit_lm$finalModel %>% summary() %>% print()
+```{r lmreg, echo=FALSE, message=FALSE, warning=FALSE}
+fit_lm$finalModel %>% summary()
 ```
 
-### Important caret code
+## Important caret code
 
 This code shows the power of utilizing `caret` models with the `tidyverse` particularly list-columns and `purrr` to quickly investigate results.
 
-```{r eval=FALSE, include=TRUE}
-results_df <- tibble(
-    modelNames = c(
-        'Backward',
-        'Backward 2-way',
-        'Forward',
-        'Forward 2-way',
-        'Lasso 2-way',
-        'Ridge 2-way',
-        'Linear Reg',
-        'RanForest',
-        'RanForest 2-way',
-        'Cond Tree 2-way'
-    ),
-    yhat_train = list(
-        pred_train_bwd,
-        pred_train_bwd_2w,
-        pred_train_fwd,
-        pred_train_fwd_2w,
-        pred_train_lasso,
-        pred_train_ridge,
-        pred_train_lm_sqrt,
-        pred_train_rf,
-        pred_train_rf_2w,
-        pred_train_tree
-    ),
-    yhat_test = list(
-        pred_test_bwd,
-        pred_test_bwd_2w,
-        pred_test_fwd,
-        pred_test_fwd_2w,
-        pred_test_lasso,
-        pred_test_ridge,
-        pred_test_lm_sqrt,
-        pred_test_rf,
-        pred_test_rf_2w,
-        pred_test_tree
-    )
-) %>%
-    mutate(
-        train_residuals = purrr::map(yhat_train, ~ (.x - train_y_sqrt)),
-        test_residuals =  purrr::map(yhat_test, ~ (.x - test_y_sqrt)),
-        R2_train = purrr::map_dbl(yhat_train, ~ caret::R2(.x, train_y_sqrt)),
-        R2_test = purrr::map_dbl(yhat_test, ~ caret::R2(.x, test_y_sqrt)),
-        RMSE_train = purrr::map_dbl(yhat_train, ~ caret::RMSE(.x, train_y_sqrt)),
-        RMSE_test = purrr::map_dbl(yhat_test, ~ caret::RMSE(.x, test_y_sqrt)),
-        MAE_train = purrr::map_dbl(yhat_train, ~ caret::MAE(.x, train_y_sqrt)),
-        MAE_test = purrr::map_dbl(yhat_test, ~ caret::MAE(.x, test_y_sqrt))
-    )
-results_df
-p1 <- results_df %>%
-    arrange(RMSE_test) %>%
-    mutate(modelNames = factor(modelNames,levels = modelNames)) %>%
-    dotplot(modelNames~RMSE_train+RMSE_test,.,auto.key=T, type='b', xlab='RMSE')
-p2 <- results_df %>%
-    arrange(MAE_test) %>%
-    mutate(modelNames = factor(modelNames,levels = modelNames)) %>%
-    dotplot(modelNames~MAE_train+MAE_test,.,auto.key=T, type='b',xlab='MAE')
-p3 <- results_df %>%
-    arrange(-R2_test) %>%
-    mutate(modelNames = factor(modelNames,levels = modelNames)) %>%
-    dotplot(modelNames~R2_train+R2_test,.,auto.key=T, type='b',xlab='R Sq')
-(final_result_dotplot <- gridExtra::grid.arrange(p1,p2,p3,ncol=3))
-
-
-```
+```{r eval = FALSE}
+ results_df <- tibble(
+     modelNames = c(
+         'Backward',
+         'Backward 2-way',
+         'Forward',
+         'Forward 2-way',
+         'Lasso 2-way',
+         'Ridge 2-way',
+         'Linear Reg',
+         'RanForest',
+         'RanForest 2-way',
+         'Cond Tree 2-way'
+     ),
+     yhat_train = list(
+         pred_train_bwd,
+         pred_train_bwd_2w,
+         pred_train_fwd,
+         pred_train_fwd_2w,
+         pred_train_lasso,
+         pred_train_ridge,
+         pred_train_lm_sqrt,
+         pred_train_rf,
+         pred_train_rf_2w,
+         pred_train_tree
+     ),
+     yhat_test = list(
+         pred_test_bwd,
+         pred_test_bwd_2w,
+         pred_test_fwd,
+         pred_test_fwd_2w,
+         pred_test_lasso,
+         pred_test_ridge,
+         pred_test_lm_sqrt,
+         pred_test_rf,
+         pred_test_rf_2w,
+         pred_test_tree
+     )
+ ) %>%
+     mutate(
+         train_residuals = purrr::map(yhat_train, ~ (.x - train_y_sqrt)),
+         test_residuals =  purrr::map(yhat_test, ~ (.x - test_y_sqrt)),
+         R2_train = purrr::map_dbl(yhat_train, ~ caret::R2(.x, train_y_sqrt)),
+         R2_test = purrr::map_dbl(yhat_test, ~ caret::R2(.x, test_y_sqrt)),
+         RMSE_train = purrr::map_dbl(yhat_train, ~ caret::RMSE(.x, train_y_sqrt)),
+         RMSE_test = purrr::map_dbl(yhat_test, ~ caret::RMSE(.x, test_y_sqrt)),
+         MAE_train = purrr::map_dbl(yhat_train, ~ caret::MAE(.x, train_y_sqrt)),
+         MAE_test = purrr::map_dbl(yhat_test, ~ caret::MAE(.x, test_y_sqrt))
+     )
+ results_df
+ p1 <- results_df %>%
+     arrange(RMSE_test) %>%
+     mutate(modelNames = factor(modelNames,levels = modelNames)) %>%
+     dotplot(modelNames~RMSE_train+RMSE_test,.,auto.key=T, type='b', xlab='RMSE')
+ p2 <- results_df %>%
+     arrange(MAE_test) %>%
+     mutate(modelNames = factor(modelNames,levels = modelNames)) %>%
+     dotplot(modelNames~MAE_train+MAE_test,.,auto.key=T, type='b',xlab='MAE')
+ p3 <- results_df %>%
+     arrange(-R2_test) %>%
+     mutate(modelNames = factor(modelNames,levels = modelNames)) %>%
+     dotplot(modelNames~R2_train+R2_test,.,auto.key=T, type='b',xlab='R Sq')
+ (final_result_dotplot <- gridExtra::grid.arrange(p1,p2,p3,ncol=3)
+ ```
