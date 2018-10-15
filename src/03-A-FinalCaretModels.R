@@ -206,9 +206,9 @@ resamps <- resamples(
 )
 summary(resamps)
 
-bwplot(resamps, metric = c('RMSE','MAE'))
-bwplot(resamps, metric = c('Rsquared'))
-dotplot(resamps, metric = c('Rsquared'))
+(resamps_plot_1 <- bwplot(resamps, metric = c('RMSE','MAE')))
+(resamps_plot_2 <- bwplot(resamps, metric = c('Rsquared')))
+(resamps_plot_3 <- dotplot(resamps, metric = c('Rsquared')))
 
 # tibble(pred_rpart_1,pred_rpart_caret_1,pred_rpart_caret_2,pred_ctree_1,
 #        pred_ctree_caret, preds_glmnet_caret) %>%
@@ -278,4 +278,19 @@ p3 <- results_df %>%
     arrange(-R2_test) %>%
     mutate(modelNames = factor(modelNames,levels = modelNames)) %>%
     dotplot(modelNames~R2_train+R2_test,.,auto.key=T, type='b',xlab='R Sq')
-gridExtra::grid.arrange(p1,p2,p3,ncol=3)
+(final_result_dotplot <- gridExtra::grid.arrange(p1,p2,p3,ncol=3))
+
+
+ls(pattern = 'df') %>%
+    purrr::walk(.f = ~cache(.x))
+ls(pattern = 'train_') %>%
+    purrr::walk(.f = ~cache(.x))
+ls(pattern = 'test_') %>%
+    purrr::walk(.f = ~cache(.x))
+ls(pattern = 'pred_') %>%
+    purrr::walk(.f = ~cache(.x))
+ls(pattern = 'fit_') %>%
+    purrr::walk(.f = ~cache(.x))
+ls(pattern = 'resamps_plot') %>%
+    purrr::walk(.f = ~cache(.x))
+cache('final_result_dotplot')

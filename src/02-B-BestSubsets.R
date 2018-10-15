@@ -88,8 +88,6 @@ preds_glmnet_cv <- predict(fit_glmnet_cv, s = 'lambda.1se', newx = as.matrix(df_
 (glmnet_rmse <- (mean((df_bsr_1$price_sqrt - preds_glmnet_cv)^2))^0.5)
 (glmnet_mae <- (mean(abs(df_bsr_1$price_sqrt - preds_glmnet_cv)^2)))
 
-
-
 df_bsr_2 <- model.matrix(price_sqrt~(.)^2, df_bsr_1)[,-1]
 
 fit_glmnet_cv_2 <- cv.glmnet(x = as.matrix(df_bsr_2),
@@ -126,3 +124,5 @@ preds_glmnet_scaled <- predict(fit_glmnet_scaled, s = 'lambda.1se', newx = as.ma
 
 (glmnet_rmse_scaled <- (mean((df_bsr_1$price_sqrt - preds_glmnet_scaled)^2))^0.5)
 (glmnet_mae_scaled <- (mean(abs(df_bsr_1$price_sqrt - preds_glmnet_scaled)^2)))
+
+# elasticnet::predict.enet(fit_lasso$finalModel,type = 'coefficients', mode = 'fraction', s = 0.65)

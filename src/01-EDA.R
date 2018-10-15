@@ -20,7 +20,7 @@ df_train %>%
   plot_ly(
     type = "parcoords",
     line = list(
-      color = ~log(price),
+      color = ~price_sqrt,
       colorscale = "Jet",
       showscale = TRUE
     ),
@@ -28,10 +28,10 @@ df_train %>%
       list(values = ~as.numeric(carat), label = "carat"),
       list(values = ~as.numeric(cut), label = "cut", ticktext = levels(df_train$cut), tickvals = 1:length(levels(df_train$cut))),
       list(values = ~as.numeric(clarity), label = "clarity"),
-      list(values = ~(10-as.numeric(color)), label = "color"),
+      list(values = ~as.numeric(color), label = "color"),
       list(values = ~as.numeric(channel), label = "channel", ticktext = levels(df_train$channel), tickvals = 1:length(levels(df_train$channel))),
       list(values = ~as.numeric(store), label = "store", ticktext = levels(df_train$store), tickvals = 1:length(levels(df_train$store))),
-      list(values = ~as.numeric(price), label = "price")
+      list(values = ~round(as.numeric(price_sqrt),digits = 2), label = "price")
     )
   )
 
@@ -52,7 +52,8 @@ df_train %>%
     b = ~color,
     c = ~clarity,
     text = ~channel,
-    marker = list(color = ~price, symbol = 100, size = 9, line = list(width = 2))
+    marker = list(color = ~price, symbol = 100, size = 9, line = list(width = 2)),
+    height = 400
   ) %>%
   layout(ternary = list(
     sum = 100,
@@ -105,15 +106,34 @@ df_train %>%
     tabyl(store) %>%
     adorn_pct_formatting()
 
-bwplot(price~cut, df_train, xlab = 'cut')
-bwplot(price~channel, df_train, xlab = 'channel')
-bwplot(price~store, df_train, xlab = 'store')
-bwplot(price~as.factor(color), df_train, xlab = 'color')
-bwplot(price~as.factor(clarity), df_train, xlab = 'clarity')
-xyplot(price~carat,df_train,type=c('smooth','p'))
-xyplot(price~color,df_train,type=c('smooth','p'))
-xyplot(price~clarity,df_train,type=c('smooth','p'))
+bwplot(price_sqrt~cut, df_train, xlab = 'cut')
+bwplot(price_sqrt~channel, df_train, xlab = 'channel')
+bwplot(price_sqrt~store, df_train, xlab = 'store')
+bwplot(price_sqrt~store,df_train, xlab = 'store')
+bwplot(price_sqrt~as.factor(color), df_train, xlab = 'color')
+bwplot(price_sqrt~as.factor(clarity), df_train, xlab = 'clarity')
+xyplot(price_sqrt~carat,df_train,type=c('smooth','p'))
+xyplot(price_sqrt~color,df_train,type=c('smooth','p'))
+xyplot(price_sqrt~clarity,df_train,type=c('smooth','p'))
 
 #---- Correlation Plots ----
 cormat <- cor(df_train[,c('clarity','color','carat','price_sqrt')])
 corrplot::corrplot(cormat, method = 'number', type = 'lower', diag = F, order = 'hclust', number.cex = 2, tl.col = 'black')
+
+
+# For reporting
+lvlplot <- levelplot(price_sqrt~store+carat,df_train,pretty = T,scales = list(x=list(rot=45)),cuts = 14)
+cache('lvlplot')
+
+p1 <- xyplot(price~carat,df_train,type=c('smooth','p'),col.line='red',lwd=2)
+p2 <- xyplot(price_sqrt~carat,df_train,type=c('smooth','p'),col.line='red',lwd=2)
+carat_price_xy <- gridExtra::grid.arrange(p1,p2,ncol=2)
+cache('carat_price_xy')
+
+p1 <- xyplot(price_sqrt~carat,df_train,type=c('smooth','p'),col.line='red',lwd=2)
+p2 <- xyplot(price_sqrt~color,df_train,type=c('smooth','p'),col.line='red',lwd=2)
+p3 <- xyplot(price_sqrt~clarity,df_train,type=c('smooth','p'),col.line='red',lwd=2)
+p4 <- xyplot(price_sqrt~cut,df_train,type=c('smooth','p'),col.line='red',lwd=2)
+xy_3way <- gridExtra::grid.arrange(p1,p2,p3,p4,ncol=2)
+cache('xy_3way')
+

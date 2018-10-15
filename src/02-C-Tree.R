@@ -18,6 +18,7 @@ library(rpart.plot)
 )
 rpart.rules(fit_rpart_1)
 rpart.plot(fit_rpart_1)
+cache('fit_rpart_1')
 plotcp(fit_rpart_1)
 rpart::rsq.rpart(fit_rpart_1)
 pred_rpart <- predict(fit_rpart_1)
@@ -46,7 +47,7 @@ fit_rpart_caret_2 <- train(x = df_tree_2[,-1],
                          trControl = trainControl(method = 'cv', number = 5))
 fit_rpart_caret_2
 fit_rpart_caret_2$finalModel
-plot(fit_rpart_caret_2)
+plot(fit_rpart_caret_2$finalModel)
 caret::RMSE(predict(fit_rpart_caret_2), df_tree_2$price_sqrt)
 caret::MAE(predict(fit_rpart_caret_2), df_tree_2$price_sqrt)
 
@@ -81,3 +82,4 @@ fit_ctree_caret_2
 plot(fit_ctree_caret_2)
 caret::RMSE(predict(fit_ctree_caret_2), df_tree_1$price_sqrt)
 caret::MAE(predict(fit_ctree_caret_2), df_tree_1$price_sqrt)
+

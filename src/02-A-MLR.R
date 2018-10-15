@@ -21,10 +21,10 @@ build_model_and_explore <- function(formula, dataset, modelname, wt){
 }
 
 
-df_lm_1 <- df_train[c(response_sqrt, predictors)]
+df_lm_1 <- df_train[c(response, predictors)]
 
 # Randomize rows
-df_lm_1 <- df_lm_1[sample(1:nrow(df_lm_1), nrow(df_lm_1)),]
+# df_lm_1 <- df_lm_1[sample(1:nrow(df_lm_1), nrow(df_lm_1)),]
 
 df_lm_1 <- as_tibble(model.matrix(~., df_lm_1)[,-1]) %>%
     janitor::clean_names()
@@ -36,14 +36,14 @@ df_lm_1 <- df_lm_1[-lin_combos_to_remove]
 
 (predictors_lm_1 <- names(df_lm_1[-1]))
 
-result <- build_model_and_explore(formula = make_model_formula(response_sqrt,predictors_lm_1),
+result <- build_model_and_explore(formula = make_model_formula(response,predictors_lm_1),
                         dataset = df_lm_1,
-                        modelname = 'Sqrt Model',
+                        modelname = 'Lin Model',
                         wt = wt)
 
 fit_lm_1 <- result[[1]]
 
-xyplot(fit_lm_1$residuals~fit_lm_1$fitted.values, panel = function(...){panel.abline(h = 0,col = 'gray');panel.xyplot(...,type = c('smooth','p'),col.line = 'red',lwd = 1)})
+xyplot(fit_lm_1$residuals~fit_lm_1$fitted.values, xlab='Fitted',ylab='Residuals',panel = function(...){panel.abline(h = 0,col = 'gray');panel.xyplot(...,type = c('smooth','p'),col.line = 'red',lwd = 1)})
 
 # explainer_glm2 <- DALEX::explain(lm_model2, data=df_02a_pl, y=df_02a_pl$price_log)
 #
