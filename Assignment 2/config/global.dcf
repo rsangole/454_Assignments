@@ -2,13 +2,13 @@ version: 0.8.2
 data_loading: FALSE
 data_loading_header: TRUE
 data_ignore:
-cache_loading: FALSE
+cache_loading: TRUE
 recursive_loading: FALSE
-munging: TRUE
+munging: FALSE
 logging: FALSE
 logging_level: INFO
 load_libraries: TRUE
-libraries: reshape2, plyr, tidyverse, stringr, lubridate, lattice, janitor, skimr, auditor, modelDown, plotly, ggalluvial, caret, leaps, glmnet
+libraries: reshape2, plyr, tidyverse, stringr, lubridate, lattice, janitor, skimr, auditor, modelDown, plotly, ggalluvial, caret, leaps, glmnet, zeallot, latticeExtra
 as_factors: TRUE
 data_tables: FALSE
 attach_internal_libraries: FALSE
