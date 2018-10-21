@@ -62,8 +62,14 @@ for (i in 1:6) {
     geom_raster(interpolate = T)+
     scale_fill_gradient2(low = 'black',high='red',midpoint = -60,mid = 'yellow')+
     geom_point()+
-    geom_point(aes(x = mac_x, y = mac_y),col='red',pch=2, size = 4)+
+    geom_point(aes(x = mac_x, y = mac_y),col='blue',pch=2, size = 4)+
     labs(title=paste(i," -- ",mac_addresses[i]))+
     theme_light() -> p
   plot(p)
 }
+
+
+# Distance
+
+xyplot(strength~dist|mac+degree, df_raw, alpha=0.2)
+xyplot(strength~dist|degree, df_raw, alpha=0.2)
