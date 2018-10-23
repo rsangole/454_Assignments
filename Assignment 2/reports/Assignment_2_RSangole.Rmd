@@ -1,0 +1,176 @@
+---
+title: "Assignment 2 : Predict 454"
+author: "Rahul Sangole"
+date: "`r Sys.Date()`"
+output: tint::tintPdf
+bibliography: skeleton.bib
+link-citations: yes
+---
+
+```{r load_packages, include = FALSE}
+library("papaja")
+library('tidyverse')
+library('knitr')
+library('kableExtra')
+library('lattice')
+library('latticeExtra')
+library('ggthemr')
+library('janitor')
+library('skimr')
+library('zeallot')
+ggthemr("flat dark")
+options(knitr.table.format = "latex")
+variables <- dir(path = '../cache', full.names = T, pattern = '.RData')
+purrr::walk(variables, ~load(.x,envir = .GlobalEnv))
+```
+
+```{r functions, include=FALSE}
+plot_search <- function(fit, k_space, model_name) {
+  tibble(fit = fit, k_space = k_space) %>%
+    ggplot() +
+    geom_line(aes(x = k_space, y = fit)) +
+    geom_point(aes(x = k_space, y = fit)) +
+    geom_point(aes(
+      x = k_space[which(fit == min(fit))],
+      y = min(fit)
+    ), col = "yellow", size = 2) +
+    labs(title = paste0("Model name: ", model_name, "       Min error: ", round(min(fit), 3)))
+}
+```
+
+# Modeling Problem
+
+
+
+# Data
+
+# Exploratory Data Analysis
+
+# Model Comparison
+
+```{r k_search, fig.margin=TRUE, fig.width=4, fig.height=4, cache=TRUE, echo=FALSE, fig.cap='Search for k'}
+plot_search(k_search_median_l1, 1:30, "median_l1")
+plot_search(k_search_mean_l1_wted, 1:30, "mean_l1_wted")
+```
+
+```{r model_comp, fig.margin=TRUE, fig.width=4, fig.height=4, cache=TRUE, echo=FALSE, fig.cap='Prediction Plots'}
+ kFit_l1 %>%
+   ggplot()+
+   geom_point(aes(pos_x,x_hat),col='yellow')+
+   geom_point(aes(pos_y,y_hat))+
+   geom_abline(slope = 1, intercept = 0, col='gray')+
+   labs(x='x  or  y', y='x_hat  or  y_hat',caption="x values in yellow")
+```
+ 
+```{r results_df, echo=FALSE, fig.cap='Test set performance, top 6 models by RSquared', message=FALSE, warning=FALSE}
+ result_summary %>%
+   dplyr::select(-avg_error) %>%
+     kable(caption='Results Compared', booktabs=T, digits=c(0,2,2))
+```
+
+```{r finalcomparison, fig.fullwidth=TRUE, fig.width=9, fig.height=4, cache=TRUE, echo=FALSE, fig.cap='Comparison of the final models on train and test datasets'}
+result_summary %>%
+  ggplot(aes(forcats::fct_reorder(model_names, min_error,.desc = T), min_error))+
+  geom_col()+
+  coord_flip()+
+  labs(x="")
+```
+
+# Appendix
+
+```{r eval=FALSE}
+find_knn_wted <- function(df_train, test_row, k, d_type) {
+  train_dist_mat <- as.matrix(df_train[, -1:-2])
+  test_strengths <- as.matrix(test_row[, -1:-2])
+  distance <- numeric()
+  switch(d_type,
+    euc = {
+      for (i in 1:nrow(train_dist_mat)) {
+        distance <- c(distance, sqrt(sum((train_dist_mat[i, ] - test_strengths)^2)))
+      }
+    },
+    l1 = {
+      for (i in 1:nrow(train_dist_mat)) {
+        distance <- c(distance, (sum(abs(train_dist_mat[i, ] - test_strengths))))
+      }
+    }
+  )
+
+  df_train <- df_train %>%
+    dplyr::mutate(distance = distance) %>%
+    dplyr::select(pos_x, pos_y, degree, distance) %>%
+    dplyr::arrange(distance)
+
+  sum_wt <- sum(1 / df_train$distance)
+  weights <- (1 / df_train$distance) / sum_wt
+  df_train$distance <- df_train$distance * weights
+
+  df_train %>%
+    dplyr::arrange(distance) %>%
+    head(k)
+}
+find_knn <- function(df_train, test_row, k, d_type) {
+  train_dist_mat <- as.matrix(df_train[, -1:-2])
+  test_strengths <- as.matrix(test_row[, -1:-2])
+  distance <- numeric()
+  switch(d_type,
+    euc = {
+      for (i in 1:nrow(train_dist_mat)) {
+        distance <- c(distance, sqrt(sum((train_dist_mat[i, ] - test_strengths)^2)))
+      }
+    },
+    l1 = {
+      for (i in 1:nrow(train_dist_mat)) {
+        distance <- c(distance, (sum(abs(train_dist_mat[i, ] - test_strengths))))
+      }
+    }
+  )
+  df_train %>%
+    dplyr::mutate(distance = distance) %>%
+    dplyr::select(pos_x, pos_y, degree, distance) %>%
+    dplyr::arrange(distance) %>%
+    head(k)
+}
+get_xy_hats <- function(df_train, test_row, k, d_type, wted) {
+  if (wted) {
+    nearest_neighbours <- find_knn_wted(df_train, test_row, k, d_type)
+  } else {
+    nearest_neighbours <- find_knn(df_train, test_row, k, d_type)
+  }
+
+  x_hat <- mean(nearest_neighbours$pos_x)
+  y_hat <- mean(nearest_neighbours$pos_y)
+  paste(x_hat, y_hat, sep = "_")
+}
+get_errors <- function(df_train, df_test, k, type, d_type, wted) {
+  euc_dist <- character()
+  for (i in 1:nrow(df_test)) {
+    euc_dist <- c(euc_dist, get_xy_hats(df_train, df_test[i, ], k, d_type, wted))
+  }
+  df_test$euc_dist <- euc_dist
+  df_test <- df_test %>% separate(euc_dist, sep = "_", into = c("x_hat", "y_hat"))
+  df_test <- df_test %>%
+    select(matches("[xy]")) %>%
+    map_df(~as.numeric(.x)) %>%
+    mutate(err = sqrt((x_hat - pos_x)^2 + (y_hat - pos_y)^2))
+  if (type == "mean") {
+    return(mean(df_test$err))
+  }
+  if (type == "median") {
+    return(median(df_test$err))
+  }
+}
+get_predictions <- function(df_train, df_test, k, d_type, wted) {
+  distance <- character()
+  for (i in 1:nrow(df_test)) {
+    distance <- c(distance, get_xy_hats(df_train, df_test[i, ], k, d_type, wted))
+  }
+  df_test$distance <- distance
+  df_test <- df_test %>%
+    separate(distance, sep = "_", into = c("x_hat", "y_hat"))
+  df_test %>%
+    select(matches("[xy]")) %>%
+    map_df(~as.numeric(.x)) %>%
+    mutate(err = (sqrt((x_hat - pos_x)^2) + sqrt((y_hat - pos_y)^2)) / 2)
+}
+```

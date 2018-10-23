@@ -99,3 +99,5 @@ df_test_raw <- df_test_raw %>%
     degree_corrected = NULL
   )
 df_test_raw <- df_test_raw %>% filter(mac %in% mac_to_keep)
+
+cache('df_test_raw')
