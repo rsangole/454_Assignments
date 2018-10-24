@@ -38,22 +38,92 @@ plot_search <- function(fit, k_space, model_name) {
 }
 ```
 
-# Modeling Problem
+# The Modeling Problem & Data Prep
 
+The objective of this exercise is to develop an internal positioning system, which will try to predict the location of a mobile user based off of the relative strengths of the Wi-Fi signal measured on the mobile device as it connects to 6 Wi-Fi routers placed in the building. 
 
+The input data is a flat file in a messy format. It contains intersperced comment lines which start with `#`, semi-colon separated key-value pairs, with some `=` separated key-value pairs containing further  comma-separated list of values, one of the key-value having a varying number of values in the list. This level of messiness causes some consternation during data preparation, but can be quickly and elegantly solved by using the appropriate functions from `tidyverse`. Sample code for data prep is shown in the appendix.
 
-# Data
+Furthermore, while the objective of the problem is predict the location of the user based on the strengths of 6 routers, there are additional router mac addresses in the original data. These were identified based on the meta data for the routers, and appropriately filtered.
+
+The positions of each of the six routers is identified from the diagram provided, joined with the training dataset, and a eucledian distance is calculated for each point.
+
+```{r degrees, echo=FALSE, fig.cap='ECDF', fig.height=4, fig.margin=TRUE, fig.width=4, message=FALSE, warning=FALSE, cache=TRUE}
+plot(ecdf(df_raw$degree),pch='.',ylab='ECDF',xlab='degree',main='')
+```
+
+The result of the data prep is a training data-frame which is (769,332 x 10), with the test dataset being (34,778 x 6). So, essentially, we have 769,332 observations to a build a model from, to predict the location of 34,778 datapoints. The data are manipulated so that each row in the table corresponds to a one observation for one location, for one angle, for one of the Wi-Fi routers.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+head(df_raw) %>% knitr::kable()
+```
+
+The degree at which the mobile phone is held was varied at increments of 45 degrees. However, the data did show angles not equal to these increments, but quite close to them. One of the first data clean up activities was to adjust the `degrees` column to make the angles equal 45 degree increments. The ECDF plot shows the cumulative distribution post-correction.
+
+\newpage
 
 # Exploratory Data Analysis
 
+The data are explored in various ways - from univariate to multivariate graphical methods. Two of the more interesting plots are shown here. The first is a marginal plot which shows the distributions of 4 key variables conditional on the 6 routers. Right away we can see that strength has very varying distributions for each router.
+
+```{r margin_plot, fig.margin=TRUE, fig.width=5, fig.height=5, cache=TRUE, echo=FALSE, fig.cap='Margin plot'}
+marginal.plot(~df_raw[,c(2,4,5,6)], df_raw, plot.points = F,groups = df_raw$mac, auto.key = T)
+```
+
+For each coordinate, the average strength can be calculated. I have done this for all the degrees combined. This strength is plotted on a raster plot which shows interesting distributions. The triangle shows the position of router 2, and clearly the strength of signals is the highest in the opposite corridor. Wi-fi doesn't travel well perpendicular to corridors, and we can see the sharp drop in strength as shown in black.
+
+```{r strength, echo=FALSE, fig.height=4, fig.fullwidth=TRUE,  fig.width=10, message=FALSE, warning=FALSE, fig.cap='Signal strength by location'}
+mac_addresses <- unique(df_raw$mac)
+df_raw %>%
+  dplyr::filter(mac == mac_addresses[2]) %>%
+  group_by(mac_x, mac_y, pos_x, pos_y) %>%
+  summarise(mean_str = mean(strength),
+            sd_str = sd(strength)) %>%
+  ggplot(aes(x = pos_x, y = pos_y, z = mean_str, fill = mean_str))+
+  geom_raster(interpolate = T)+
+  scale_fill_gradient2(low = 'black',high='red',midpoint = -60,mid = 'yellow')+
+  geom_point()+
+  geom_point(aes(x = mac_x, y = mac_y),col='blue',pch=2, size = 4)+
+  labs(title=paste("2 -- ",mac_addresses[2]))+
+  theme_light()
+```
+
 # Model Comparison
 
-```{r k_search, fig.margin=TRUE, fig.width=4, fig.height=4, cache=TRUE, echo=FALSE, fig.cap='Search for k'}
+```{r k_search, fig.margin=TRUE, fig.width=4, fig.height=4, cache=TRUE, echo=FALSE, fig.cap='Search for k Median L1'}
 plot_search(k_search_median_l1, 1:30, "median_l1")
+```
+
+The model built is a k-nearest neighbours model. In essence, the model tries to identify the "k" "closest" points in the training  dataset to the point we wish to classify in the test dataset. "k" is selected by cross-validation. The definition of "closest" can be done in a few ways - eucledian distance, manhattan distance, weighted distances. Also, to process the top "k" choices, we can calculate the mean distances, or the median distances etc.
+
+Here, I have developed a few models, and performed cross validation on all of them.
+
+* Median of distances, l1 distance
+* Mean of distances, l1 distance
+* Median of distances, eucledian distance
+* Mean of distances, eucledian distance
+* Mean of weighted distances, l1 distance
+* Mean of weighted distances, eucledian distance
+
+
+```{r k_search1, fig.margin=TRUE, fig.width=4, fig.height=4, cache=TRUE, echo=FALSE, fig.cap='Search for k Mean Weighted L1'}
 plot_search(k_search_mean_l1_wted, 1:30, "mean_l1_wted")
 ```
 
-```{r model_comp, fig.margin=TRUE, fig.width=4, fig.height=4, cache=TRUE, echo=FALSE, fig.cap='Prediction Plots'}
+The functions to solve the models are custom developed and documented in the appendix. The plots to the right show the cross-validation searches for optimal value of k for two of the models. The performance for all the models is shown below. The best model is the median fit with the L1 distance, with a k value of 15 points, which results in an error of 1.38. (This error is calculated as the average error of the x_hat and y_hat position estimations.) The second best model is the median fit with the eucledian distance which results in an error of 1.59 for a k value of 6.
+
+```{r finalcomparison, fig.fullwidth=TRUE, fig.width=10, fig.height=3.5, cache=TRUE, echo=FALSE, fig.cap='Comparison of the final models on train and test datasets'}
+result_summary %>%
+  ggplot(aes(forcats::fct_reorder(model_names, min_error,.desc = T), min_error))+
+  geom_col()+
+  coord_flip()+
+  geom_point(aes(forcats::fct_reorder(model_names, min_error,.desc = T), y=k_at_min), color='yellow', size=3)+
+  labs(x="",y="Min Error (blue bars), optimal k (yellow dots)")
+```
+
+Selecting the best model, the following graph shows the comparison of the fitted values to the true values. Points in blue are for the y-location, while points in yellow are for the x-location. The model performs quite well in it's predictive power.
+
+```{r model_comp, fig.margin=FALSE, fig.width=6, fig.height=6, cache=TRUE, echo=FALSE, fig.cap='Prediction Plots'}
  kFit_l1 %>%
    ggplot()+
    geom_point(aes(pos_x,x_hat),col='yellow')+
@@ -62,53 +132,48 @@ plot_search(k_search_mean_l1_wted, 1:30, "mean_l1_wted")
    labs(x='x  or  y', y='x_hat  or  y_hat',caption="x values in yellow")
 ```
  
-```{r results_df, echo=FALSE, fig.cap='Test set performance, top 6 models by RSquared', message=FALSE, warning=FALSE}
- result_summary %>%
-   dplyr::select(-avg_error) %>%
-     kable(caption='Results Compared', booktabs=T, digits=c(0,2,2))
-```
-
-```{r finalcomparison, fig.fullwidth=TRUE, fig.width=9, fig.height=4, cache=TRUE, echo=FALSE, fig.cap='Comparison of the final models on train and test datasets'}
-result_summary %>%
-  ggplot(aes(forcats::fct_reorder(model_names, min_error,.desc = T), min_error))+
-  geom_col()+
-  coord_flip()+
-  labs(x="")
-```
+\newpage
 
 # Appendix
 
+## Quick data ingestion using `tidyverse`
+
 ```{r eval=FALSE}
-find_knn_wted <- function(df_train, test_row, k, d_type) {
-  train_dist_mat <- as.matrix(df_train[, -1:-2])
-  test_strengths <- as.matrix(test_row[, -1:-2])
-  distance <- numeric()
-  switch(d_type,
-    euc = {
-      for (i in 1:nrow(train_dist_mat)) {
-        distance <- c(distance, sqrt(sum((train_dist_mat[i, ] - test_strengths)^2)))
-      }
-    },
-    l1 = {
-      for (i in 1:nrow(train_dist_mat)) {
-        distance <- c(distance, (sum(abs(train_dist_mat[i, ] - test_strengths))))
-      }
-    }
-  )
 
-  df_train <- df_train %>%
-    dplyr::mutate(distance = distance) %>%
-    dplyr::select(pos_x, pos_y, degree, distance) %>%
-    dplyr::arrange(distance)
-
-  sum_wt <- sum(1 / df_train$distance)
-  weights <- (1 / df_train$distance) / sum_wt
-  df_train$distance <- df_train$distance * weights
-
-  df_train %>%
-    dplyr::arrange(distance) %>%
-    head(k)
+make_df <- function(i,x){
+  tibble(row_id = i,
+         measurements = unlist(x)) %>%
+    separate(measurements, sep = ",", into = c("mac", "freq", "mode")) %>%
+    separate(col = 'mac', sep="=", into= c("mac","strength"))
 }
+raw_lines <- read_lines("data/offline.final.trace.txt")
+raw_lines <- raw_lines[!stringr::str_detect(raw_lines, pattern = "^#")]
+raw_lines_list <- map(raw_lines, ~stringr::str_split(.x,pattern = ';',simplify = T))
+mask <- map_int(raw_lines_list, ~length(.x)) < 5
+raw_lines_list <- raw_lines_list[!mask]
+df <- tibble(
+  t=map_chr(raw_lines_list,~.x[[1,1]]),
+  id=map_chr(raw_lines_list,~.x[[1,2]]),
+  pos=map_chr(raw_lines_list,~.x[[1,3]]),
+  degree=map_chr(raw_lines_list,~.x[[1,4]])) %>%
+  separate(col = 'pos', sep = ",", into = c("pos_x","pos_y","pos_z")) %>%
+  map_df(~stringr::str_remove_all(.x, pattern = "[a-z]*=")) %>%
+  mutate(t=as.POSIXct(x = as.numeric(t)/1000,origin = '1970-01-01 UTC'),
+         pos_x = as.numeric(pos_x),
+         pos_y = as.numeric(pos_y),
+         pos_z = as.numeric(pos_z),
+         degree = as.numeric(degree)) %>% 
+  rownames_to_column('row_id')
+
+names(raw_lines_list) <- df$row_id
+measurements <- map(raw_lines_list, ~.x[-1:-4])
+df_measurements <- seq_along(measurements) %>% map_df(~make_df(.x, measurements[.x]))
+df_raw <- df_measurements %>% left_join(df)
+```
+
+## knn Model Code
+
+```{r eval=FALSE}
 find_knn <- function(df_train, test_row, k, d_type) {
   train_dist_mat <- as.matrix(df_train[, -1:-2])
   test_strengths <- as.matrix(test_row[, -1:-2])
@@ -173,4 +238,11 @@ get_predictions <- function(df_train, df_test, k, d_type, wted) {
     map_df(~as.numeric(.x)) %>%
     mutate(err = (sqrt((x_hat - pos_x)^2) + sqrt((y_hat - pos_y)^2)) / 2)
 }
+```
+
+## Solving the knn model to search for K
+
+```{r eval = FALSE}
+k_search_mean_l1 <- 1:30 %>% map_dbl(~get_errors(df_train, df_test, .x, "mean", "l1", FALSE))
+k_search_mean_euc <- 1:30 %>% map_dbl(~get_errors(df_train, df_test, .x, "mean", "euc", FALSE))
 ```

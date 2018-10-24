@@ -27,7 +27,7 @@ xyplot(jitter(pos_y)~jitter(pos_x), df_raw)
 ecdfplot(~strength|degree,df_raw)
 ecdfplot(~strength|mac,df_raw)
 densityplot(~strength|mac,df_raw, plot.points=F)
-marginal.plot(~df_raw[,c(1,2,4,5)], df_raw, plot.points = F,groups = df_raw$degree)
+marginal.plot(~df_raw[,c(2,4,5,6)], df_raw, plot.points = F,groups = df_raw$mac, auto.key = list(rows=1)) # for report
 
 bwplot(strength~mac|degree, df_raw, scales = list(x=list(rot=45)))
 bwplot(strength~degree|mac, df_raw, scales = list(x=list(rot=45)))
@@ -44,7 +44,6 @@ df_raw %>%
             sd_str = sd(strength)) %>%
   ungroup() %>%
   dotplot(sd_str~mac,groups=degree,.,auto.key=list(columns=9), scales = list(x=list(rot=45)))
-
 df_raw %>%
   group_by(mac,degree,pos_xy) %>%
   summarise(mean_str = mean(strength),
@@ -54,7 +53,7 @@ df_raw %>%
 mac_addresses <- unique(df_raw$mac)
 for (i in 1:6) {
   df_raw %>%
-    filter(mac == mac_addresses[i]) %>%
+    dplyr::filter(mac == mac_addresses[i]) %>%
     group_by(mac_x, mac_y, pos_x, pos_y) %>%
     summarise(mean_str = mean(strength),
               sd_str = sd(strength)) %>%
