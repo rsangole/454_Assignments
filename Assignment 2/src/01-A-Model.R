@@ -27,12 +27,16 @@ find_knn_wted <- function(df_train, test_row, k, d_type) {
   switch(d_type,
     euc = {
       for (i in 1:nrow(train_dist_mat)) {
-        distance <- c(distance, sqrt(sum((train_dist_mat[i, ] - test_strengths)^2)))
+        distance <-
+          c(distance, sqrt(sum((train_dist_mat[i, ] - test_strengths)^2)))
       }
     },
     l1 = {
       for (i in 1:nrow(train_dist_mat)) {
-        distance <- c(distance, (sum(abs(train_dist_mat[i, ] - test_strengths))))
+        distance <-
+          c(distance, (sum(
+            abs(train_dist_mat[i, ] - test_strengths)
+          )))
       }
     }
   )
@@ -57,12 +61,16 @@ find_knn <- function(df_train, test_row, k, d_type) {
   switch(d_type,
     euc = {
       for (i in 1:nrow(train_dist_mat)) {
-        distance <- c(distance, sqrt(sum((train_dist_mat[i, ] - test_strengths)^2)))
+        distance <-
+          c(distance, sqrt(sum((train_dist_mat[i, ] - test_strengths)^2)))
       }
     },
     l1 = {
       for (i in 1:nrow(train_dist_mat)) {
-        distance <- c(distance, (sum(abs(train_dist_mat[i, ] - test_strengths))))
+        distance <-
+          c(distance, (sum(
+            abs(train_dist_mat[i, ] - test_strengths)
+          )))
       }
     }
   )
@@ -86,10 +94,13 @@ get_xy_hats <- function(df_train, test_row, k, d_type, wted) {
 get_errors <- function(df_train, df_test, k, type, d_type, wted) {
   euc_dist <- character()
   for (i in 1:nrow(df_test)) {
-    euc_dist <- c(euc_dist, get_xy_hats(df_train, df_test[i, ], k, d_type, wted))
+    euc_dist <-
+      c(euc_dist, get_xy_hats(df_train, df_test[i, ], k, d_type, wted))
   }
   df_test$euc_dist <- euc_dist
-  df_test <- df_test %>% separate(euc_dist, sep = "_", into = c("x_hat", "y_hat"))
+  df_test <-
+    df_test %>%
+    separate(euc_dist, sep = "_", into = c("x_hat", "y_hat"))
   df_test <- df_test %>%
     select(matches("[xy]")) %>%
     map_df(~as.numeric(.x)) %>%
@@ -104,7 +115,8 @@ get_errors <- function(df_train, df_test, k, type, d_type, wted) {
 get_predictions <- function(df_train, df_test, k, d_type, wted) {
   distance <- character()
   for (i in 1:nrow(df_test)) {
-    distance <- c(distance, get_xy_hats(df_train, df_test[i, ], k, d_type, wted))
+    distance <-
+      c(distance, get_xy_hats(df_train, df_test[i, ], k, d_type, wted))
   }
   df_test$distance <- distance
   df_test <- df_test %>%
@@ -126,43 +138,68 @@ plot_search <- function(fit, k_space, model_name) {
     labs(title = paste0("Model name: ", model_name, "       Min error: ", round(min(fit), 3)))
 }
 
-k_search_mean_l1 <- 1:30 %>% map_dbl(~get_errors(df_train, df_test, .x, "mean", "l1", FALSE))
-k_search_mean_euc <- 1:30 %>% map_dbl(~get_errors(df_train, df_test, .x, "mean", "euc", FALSE))
-k_search_median_l1 <- 1:30 %>% map_dbl(~get_errors(df_train, df_test, .x, "median", "l1", FALSE))
-k_search_median_euc <- 1:30 %>% map_dbl(~get_errors(df_train, df_test, .x, "median", "euc", FALSE))
-k_search_median_l1_wted <- 1:30 %>% map_dbl(~get_errors(df_train, df_test, .x, "median", "l1", TRUE))
-k_search_median_euc_wted <- 1:30 %>% map_dbl(~get_errors(df_train, df_test, .x, "median", "euc", TRUE))
-k_search_mean_euc_wted <- 1:30 %>% map_dbl(~get_errors(df_train, df_test, .x, "mean", "euc", TRUE))
-k_search_mean_l1_wted <- 1:30 %>% map_dbl(~get_errors(df_train, df_test, .x, "mean", "l1", TRUE))
+k_search_mean_l1 <-
+  1:30 %>%
+  map_dbl(~get_errors(df_train, df_test, .x, "mean", "l1", FALSE))
+k_search_mean_euc <-
+  1:30 %>%
+  map_dbl(~get_errors(df_train, df_test, .x, "mean", "euc", FALSE))
+k_search_median_l1 <-
+  1:30 %>%
+  map_dbl(~get_errors(df_train, df_test, .x, "median", "l1", FALSE))
+k_search_median_euc <-
+  1:30 %>%
+  map_dbl(~get_errors(df_train, df_test, .x, "median", "euc", FALSE))
+k_search_median_l1_wted <-
+  1:30 %>%
+  map_dbl(~get_errors(df_train, df_test, .x, "median", "l1", TRUE))
+k_search_median_euc_wted <-
+  1:30 %>%
+  map_dbl(~get_errors(df_train, df_test, .x, "median", "euc", TRUE))
+k_search_mean_euc_wted <-
+  1:30 %>%
+  map_dbl(~get_errors(df_train, df_test, .x, "mean", "euc", TRUE))
+k_search_mean_l1_wted <-
+  1:30 %>%
+  map_dbl(~get_errors(df_train, df_test, .x, "mean", "l1", TRUE))
 
 
 result_summary <- tibble(
-  model_names = c("mean_l1",
-                  "mean_euc",
-                  "median_l1",
-                  "median_euc",
-                  "mean_euc_wted",
-                  "mean_l1_wted",
-                  "median_euc_wted",
-                  "median_l1_wted"),
-  avg_error = c(list(k_search_mean_l1),
-                list(k_search_mean_euc),
-                list(k_search_median_l1),
-                list(k_search_median_euc),
-                list(k_search_mean_euc_wted),
-                list(k_search_mean_l1_wted),
-                list(k_search_median_euc_wted),
-                list(k_search_median_l1_wted))
+  model_names = c(
+    "mean_l1",
+    "mean_euc",
+    "median_l1",
+    "median_euc",
+    "mean_euc_wted",
+    "mean_l1_wted",
+    "median_euc_wted",
+    "median_l1_wted"
+  ),
+  avg_error = c(
+    list(k_search_mean_l1),
+    list(k_search_mean_euc),
+    list(k_search_median_l1),
+    list(k_search_median_euc),
+    list(k_search_mean_euc_wted),
+    list(k_search_mean_l1_wted),
+    list(k_search_median_euc_wted),
+    list(k_search_median_l1_wted)
+  )
 ) %>%
-  mutate(min_error = map_dbl(avg_error, ~min(.x)),
-         k_at_min = map_dbl(avg_error, ~which(.x == min(.x)))) %>%
+  mutate(
+    min_error = map_dbl(avg_error, ~min(.x)),
+    k_at_min = map_dbl(avg_error, ~which(.x == min(.x)))
+  ) %>%
   arrange(min_error)
 
 result_summary %>%
-  ggplot(aes(forcats::fct_reorder(model_names, min_error,.desc = T), min_error))+
-  geom_col()+
-  coord_flip()+
-  labs(x="")
+  ggplot(aes(
+    forcats::fct_reorder(model_names, min_error, .desc = T),
+    min_error
+  )) +
+  geom_col() +
+  coord_flip() +
+  labs(x = "")
 
 plot_search(k_search_mean_l1, 1:30, "mean_l1")
 plot_search(k_search_mean_euc, 1:30, "mean_euc")
@@ -176,22 +213,36 @@ plot_search(k_search_median_l1_wted, 1:30, "median_l1_wted")
 kFit_l1 <- get_predictions(df_train, df_test, 15, "l1", FALSE)
 
 kFit_l1 %>%
-  ggplot()+
-  geom_point(aes(pos_x,x_hat),col='yellow')+
-  geom_point(aes(pos_y,y_hat))+
-  geom_abline(slope = 1, intercept = 0, col='gray')+
-  labs(x='x  or  y', y='x_hat  or  y_hat',caption="x values in yellow")
+  ggplot() +
+  geom_point(aes(pos_x, x_hat), col = "yellow") +
+  geom_point(aes(pos_y, y_hat)) +
+  geom_abline(
+    slope = 1,
+    intercept = 0,
+    col = "gray"
+  ) +
+  labs(x = "x  or  y", y = "x_hat  or  y_hat", caption = "x values in yellow")
 
 
-g1 <- kFit_l1 %>% ggplot(aes(pos_x,x_hat))+
-  geom_abline(slope = 1, intercept = 0, col='gray') +
-  geom_point()+
+g1 <- kFit_l1 %>%
+  ggplot(aes(pos_x, x_hat)) +
+  geom_abline(
+    slope = 1,
+    intercept = 0,
+    col = "gray"
+  ) +
+  geom_point() +
   coord_equal()
-g2 <- kFit_l1 %>% ggplot(aes(pos_y,y_hat))+
-  geom_abline(slope = 1, intercept = 0, col='gray') +
-  geom_point()+
+g2 <- kFit_l1 %>%
+  ggplot(aes(pos_y, y_hat)) +
+  geom_abline(
+    slope = 1,
+    intercept = 0,
+    col = "gray"
+  ) +
+  geom_point() +
   coord_equal()
-gridExtra::grid.arrange(g1,g2,ncol=2)
+gridExtra::grid.arrange(g1, g2, ncol = 2)
 
 kFit_l1$type <- "l1"
 

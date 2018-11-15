@@ -1,0 +1,138 @@
+---
+title: "Assignment 4"
+output: 
+  html_notebook: 
+    fig_height: 6
+    fig_width: 9
+    highlight: zenburn
+    theme: simplex
+    toc: yes
+---
+
+```{r}
+library(tidyverse)
+```
+
+
+# The Modeling Problem
+
+# Data
+
+```{r}
+easy_ham <- fs::dir_ls("messages/easy_ham/",recursive = T) %>% 
+        purrr::map(~read_lines(.x))
+easy_ham_2 <- fs::dir_ls("messages/easy_ham_2/",recursive = T) %>% 
+        purrr::map(~read_lines(.x))
+hard_ham <- fs::dir_ls("messages/hard_ham/",recursive = T) %>% 
+        purrr::map(~read_lines(.x))
+spam <- fs::dir_ls("messages/spam/",recursive = T) %>% 
+        purrr::map(~read_lines(.x))
+spam_2 <- fs::dir_ls("messages/spam_2/",recursive = T) %>% 
+        purrr::map(~read_lines(.x))
+```
+
+```{r}
+split_msg <- function(x){
+        split_point = match("", x)
+        return(list(
+                header = x[1:(split_point-1)],
+                body = x[-(1:split_point)]))
+}
+has_attachment <- function(header){
+        CTloc = grep("Content-Type", header)
+        if(length(CTloc)==0) return(0)
+        multi = grep("multi", tolower(header[CTloc]))
+        if(length(multi)==0) return(0)
+        multi
+}
+get_boundary <- function(header){
+        boundary_idx = grep("boundary=",header)
+        boundary=gsub('"',"",header[boundary_idx])
+        gsub(".*boundary= *([^;]*)?.*","\\1",boundary)
+}
+drop_attachments = function(body, boundary){
+  
+  bString = paste("--", boundary, sep = "")
+  bStringLocs = which(bString == body)
+  
+  if (length(bStringLocs) <= 1) return(body)
+  
+  eString = paste("--", boundary, "--", sep = "")
+  eStringLoc = which(eString == body)
+  if (length(eStringLoc) == 0) 
+    return(body[ (bStringLocs[1] + 1) : (bStringLocs[2] - 1)])
+  
+  n = length(body)
+  if (eStringLoc < n) 
+     return( body[ c( (bStringLocs[1] + 1) : (bStringLocs[2] - 1), 
+                    ( (eStringLoc + 1) : n )) ] )
+  
+  return( body[ (bStringLocs[1] + 1) : (bStringLocs[2] - 1) ])
+}
+```
+
+
+```{r}
+raw_df <- bind_rows(
+        tibble(class = "ham", email = easy_ham),
+        tibble(class = "ham", email = easy_ham_2),
+        tibble(class = "ham", email = hard_ham),
+        tibble(class = "spam", email = spam),
+        tibble(class = "spam", email = spam_2)
+        )
+raw_df2 <- raw_df %>% 
+        mutate(
+                splits =map(raw_df$email, possibly(~split_msg(.x),otherwise = NA)),
+                header=map(splits,possibly(~.x[1]$header,otherwise = NA)),
+                body=map(splits,possibly(~.x[2]$body,otherwise = NA)),
+                has_attach = map_dbl(header,~has_attachment(.x)) > 0,
+                bndries = map(header,~get_boundary(.x)),
+                bndries = map_chr(bndries, ~.x[1]),
+                body_no_attach = map2(body, bndries, ~drop_attachments(.x, .y))
+        ) %>% 
+        select(-email,-splits)
+raw_df2 %>% sample_n(2) %>% pull(body_no_attach)
+```
+
+```{r}
+library(tidytext)
+
+process_text <- function(x) {
+        tibble(
+                text = x %>%
+                tm::removeNumbers() %>%
+                tm::removePunctuation() %>%
+                tm::removeWords(words = tidytext::get_stopwords()$word) %>%
+                tm::stemDocument() %>%
+                tm::stripWhitespace()
+        ) %>%
+        unnest_tokens(word, text)
+}
+
+process_text(raw_df2$body_no_attach[[1]])
+
+raw_df2 %>% 
+        select(class,body_no_attach) %>% 
+        
+```
+
+
+
+# EDA
+
+# Model Building
+
+## Model #1: Naive Bayes
+
+## Model #2: Decision Tree
+
+## Model #3: Random Forest
+
+## Model #4: Logistic Regression using the variable selection algorithm of your choice 
+
+## Model #5: Support Vector Machine
+
+
+# Model Comparison
+
+## Type I, Type II, AUC
