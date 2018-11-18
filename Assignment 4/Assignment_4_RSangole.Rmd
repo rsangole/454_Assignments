@@ -11,23 +11,21 @@ output:
 
 ```{r}
 library(tidyverse)
+library(caret)
 ```
 
-
-# The Modeling Problem
-
-# Data
+<!-- NAIVE BAYES CODE -->
 
 ```{r}
-easy_ham <- fs::dir_ls("messages/easy_ham/",recursive = T) %>% 
+easy_ham <- fs::dir_ls("large_data/messages/easy_ham/",recursive = T) %>% 
         purrr::map(~read_lines(.x))
-easy_ham_2 <- fs::dir_ls("messages/easy_ham_2/",recursive = T) %>% 
+easy_ham_2 <- fs::dir_ls("large_data/messages/easy_ham_2/",recursive = T) %>% 
         purrr::map(~read_lines(.x))
-hard_ham <- fs::dir_ls("messages/hard_ham/",recursive = T) %>% 
+hard_ham <- fs::dir_ls("large_data/messages/hard_ham/",recursive = T) %>% 
         purrr::map(~read_lines(.x))
-spam <- fs::dir_ls("messages/spam/",recursive = T) %>% 
+spam <- fs::dir_ls("large_data/messages/spam/",recursive = T) %>% 
         purrr::map(~read_lines(.x))
-spam_2 <- fs::dir_ls("messages/spam_2/",recursive = T) %>% 
+spam_2 <- fs::dir_ls("large_data/messages/spam_2/",recursive = T) %>% 
         purrr::map(~read_lines(.x))
 ```
 
@@ -69,8 +67,29 @@ drop_attachments = function(body, boundary){
   
   return( body[ (bStringLocs[1] + 1) : (bStringLocs[2] - 1) ])
 }
+get_bow <- function(x) {
+        tibble(
+                text = x %>%
+                        enc2native() %>% 
+                        tm::removePunctuation() %>%
+                        tm::removeNumbers() %>%
+                        tm::removeWords(words = tm::removePunctuation(tm::stopwords())) %>%
+                        tm::removeWords(words = c("\\x")) %>% 
+                        tm::stemDocument() %>%
+                        tm::stripWhitespace()
+                ) %>%
+                tidytext::unnest_tokens(word, text) %>% 
+                pull(word) %>% 
+                unique()
+}
+get_log_odds_pred <- function(test_case){
+        test_case <- test_case[test_case %in% train_bow]
+        prob_calc_df %>% 
+                dplyr::filter(word %in% test_case) %>% 
+                pull(log_odds_ratio) %>% 
+                sum()
+}
 ```
-
 
 ```{r}
 raw_df <- bind_rows(
@@ -91,32 +110,246 @@ raw_df2 <- raw_df %>%
                 body_no_attach = map2(body, bndries, ~drop_attachments(.x, .y))
         ) %>% 
         select(-email,-splits)
-raw_df2 %>% sample_n(2) %>% pull(body_no_attach)
+raw_df2
+```
+```{r}
+train_index <- caret::createDataPartition(y = raw_df2$class, p = 0.7, list = F)
+
+train_df = raw_df2[train_index,]
+test_df = raw_df2[-train_index,]
+
+train_df %>% janitor::tabyl(class)
+test_df %>% janitor::tabyl(class)
+```
+```{r}
+train_df <- train_df %>% 
+        mutate(bow = map(body_no_attach, possibly(~get_bow(.x),otherwise = NA))) %>%
+        dplyr::filter(bow %>% map_lgl(~!is.logical(.x)))
+test_df <- test_df %>% 
+        mutate(bow = map(body_no_attach, possibly(~get_bow(.x),otherwise = NA))) %>%
+        dplyr::filter(bow %>% map_lgl(~!is.logical(.x)))
+```
+
+
+```{r}
+nested_df <- train_df %>% tidyr::nest(-class)
+
+training_bow <- nested_df$data[[1]] %>% pull(bow) %>% unlist() %>% tibble(bow = .) %>% count(bow) %>% mutate(class = "ham") %>% bind_rows(nested_df$data[[2]] %>% pull(bow) %>% unlist() %>% tibble(bow = .) %>% count(bow) %>% mutate(class = "spam"))
+
+n_ham_messages <- sum(train_df$class=="ham")
+n_spam_messages <- sum(train_df$class=="spam")
+
+prob_calc_df <- training_bow %>% spread(class,n,fill=0) %>% #ham and spam columns are message counts with the words in bow
+        mutate(
+                ham_present_ratio = (ham + 0.5) / (n_ham_messages + 0.5),
+                spam_present_ratio = (spam + 0.5) / (n_spam_messages + 0.5),
+                ham_absent_ratio = (n_ham_messages - ham + 0.5) / (n_ham_messages + 0.5),
+                spam_absent_ratio = (n_spam_messages - spam + 0.5) / (n_spam_messages + 0.5),
+                log_ratio_present = log(spam_present_ratio) - log(ham_present_ratio),
+                log_ratio_absent = log(spam_absent_ratio) - log(ham_absent_ratio)
+
+        ) %>% 
+        select(
+                word = bow,
+                log_ratio_present,
+                log_ratio_absent
+        ) %>% 
+        mutate(log_odds_ratio = log_ratio_present +log_ratio_absent)
+prob_calc_df
 ```
 
 ```{r}
-library(tidytext)
+train_bow <- prob_calc_df %>% pull(word)
+test_df <- test_df %>% 
+        mutate(log_odds_pred = map_dbl(test_df$bow, ~get_log_odds_pred(.x)),
+               pred = ifelse(log_odds_pred<0,"ham","spam"))
+```
 
-process_text <- function(x) {
-        tibble(
-                text = x %>%
-                tm::removeNumbers() %>%
-                tm::removePunctuation() %>%
-                tm::removeWords(words = tidytext::get_stopwords()$word) %>%
-                tm::stemDocument() %>%
-                tm::stripWhitespace()
-        ) %>%
-        unnest_tokens(word, text)
-}
-
-process_text(raw_df2$body_no_attach[[1]])
-
-raw_df2 %>% 
-        select(class,body_no_attach) %>% 
-        
+```{r}
+mlr::measureMMCE(test_df$class,test_df$pred)
+mlr::measureFPR(test_df$class, test_df$pred, positive = "spam", negative = "ham")
 ```
 
 
+```{r message=FALSE, warning=FALSE}
+library(ggthemr)
+ggthemr("fresh")
+test_df %>% 
+        ggplot()+
+        geom_vline(xintercept = 0,color='forestgreen',lty=2)+
+        geom_density(aes(x=log_odds_pred,fill=class), alpha = 0.5)+
+        scale_x_continuous(limits = c(-400,400))
+```
+
+```{r}
+get_fpr_error <- function(threshold){
+        df <- test_df %>% 
+                mutate(pred = ifelse(log_odds_pred<threshold,"ham","spam"))
+        mlr::measureFPR(truth = df$class, response = df$pred, negative = "ham", positive = "spam")
+}
+get_fnr_error <- function(threshold){
+        df <- test_df %>% 
+                mutate(pred = ifelse(log_odds_pred<threshold,"ham","spam"))
+        mlr::measureFNR(truth = df$class, response = df$pred, negative = "ham", positive = "spam")
+        
+}
+# fpr_errors <- seq(min(test_df$log_odds_pred),max(test_df$log_odds_pred),by = 0.2) %>% 
+#         purrr::map_dbl(~get_fpr_error(.x))
+# fnr_errors <- seq(min(test_df$log_odds_pred),max(test_df$log_odds_pred),by = 0.2) %>% 
+#         purrr::map_dbl(~get_fnr_error(.x))
+fpr_errors <- seq(-10,10,by = 0.01) %>%
+        purrr::map_dbl(~get_fpr_error(.x))
+fnr_errors <- seq(-10,10,by = 0.01) %>%
+        purrr::map_dbl(~get_fnr_error(.x))
+tibble(
+        threshold = seq(-10,10,by = 0.01),
+        FPR_Error = fpr_errors,
+        FNR_Error = fnr_errors
+) %>% 
+        gather(key = key, value = value, -threshold) %>% 
+        ggplot()+
+        geom_line(aes(threshold,y=value,color=key))+
+        geom_vline(xintercept = 2.75,lty=2)
+        # scale_y_continuous(limits = c(0,0.1))
+```
+```{r}
+tibble(
+        threshold = seq(-10,10,by = 0.01),
+        FPR_Error = fpr_errors,
+        FNR_Error = fnr_errors
+) %>% mutate(equal = round(FPR_Error,digits = 3)==round(FNR_Error,digits=3)) %>% dplyr::filter(threshold==2.75)
+```
+
+
+<!-- PARTITIONING DATA PREP -->
+
+```{r}
+train_df = raw_df2[train_index,]
+test_df = raw_df2[-train_index,]
+```
+
+```{r}
+processHeader = function(header)
+{
+  # modify the first line to create a key:value pair
+  header[1] = sub("^From", "Top-From:", header[1])
+  
+  headerMat = read.dcf(textConnection(header), all = TRUE)
+  headerVec = unlist(headerMat)
+  
+  dupKeys = sapply(headerMat, function(x) length(unlist(x)))
+  names(headerVec) = rep(colnames(headerMat), dupKeys)
+  
+  return(headerVec)
+}
+processAttach = function(body, contentType){
+
+  n = length(body)
+  boundary = get_boundary(contentType)
+ 
+  bString = paste("--", boundary, sep = "")
+  bStringLocs = which(bString == body)
+  eString = paste("--", boundary, "--", sep = "")
+  eStringLoc = which(eString == body)
+  
+  if (length(eStringLoc) == 0) eStringLoc = n
+  if (length(bStringLocs) <= 1) {
+    attachLocs = NULL
+    msgLastLine = n
+    if (length(bStringLocs) == 0) bStringLocs = 0
+  } else {
+    attachLocs = c(bStringLocs[ -1 ],  eStringLoc)
+    msgLastLine = bStringLocs[2] - 1
+  }
+  
+  msg = body[ (bStringLocs[1] + 1) : msgLastLine] 
+  if ( eStringLoc < n )
+    msg = c(msg, body[ (eStringLoc + 1) : n ])
+  
+  if ( !is.null(attachLocs) ) {
+    attachLens = diff(attachLocs, lag = 1) 
+    attachTypes = mapply(function(begL, endL) {
+      CTloc = grep("^[Cc]ontent-[Tt]ype", body[ (begL + 1) : (endL - 1)])
+      if ( length(CTloc) == 0 ) {
+        MIMEType = NA
+      } else {
+        CTval = body[ begL + CTloc[1] ]
+        CTval = gsub('"', "", CTval )
+        MIMEType = sub(" *[Cc]ontent-[Tt]ype: *([^;]*);?.*", "\\1", CTval)   
+      }
+      return(MIMEType)
+    }, attachLocs[-length(attachLocs)], attachLocs[-1])
+  }
+  
+  if (is.null(attachLocs)) return(list(body = msg, attachDF = NULL) )
+  return(list(body = msg, 
+             attachDF = data.frame(aLen = attachLens, 
+                                     aType = unlist(attachTypes),
+                                     stringsAsFactors = FALSE)))                                
+}  
+get_processedHeader <- function(df){
+        df %>% 
+                mutate(header_processed = map(header,possibly(~processHeader(.x),otherwise = NA)))
+}
+get_contentTypes <- function(df){
+        df %>% 
+                mutate(content_types = map_chr(header_processed, ~.x["Content-Type"]))
+}
+get_attachInfo <- function(df){
+        df %>% 
+                mutate(attach_info = map2(.x = body,.y = content_types,.f = ~processAttach(.x, .y)[[2]]))
+}
+get_isRE <- function(df){
+        df %>% 
+                mutate(isRe = map_lgl(header_processed, ~length(grep("^[ ]*Re:", .x["Subject"]))>0))
+}
+get_numLines <- function(df){
+         df %>% 
+                mutate(numLines = map_int(body_no_attach, ~length(.x)))
+}
+get_perCapsSub <- function(df){
+        subjects <- map(df$header_processed,~.x["Subject"]) %>% 
+                unlist() %>% 
+                tm::removePunctuation()
+        perCaps <- stringr::str_count(subjects, "[A-Z]") / stringr::str_length(subjects)
+        perCaps[stringr::str_length(subjects)==0] <- 0
+        df %>% mutate(perCapsSub = perCaps)
+}
+get_perCapsSub <- function(df){
+        body <- map(train_df$body_no_attach,~paste(.x, collapse = " ")) %>% unlist()
+        body <- tm::removePunctuation(body)
+        body <- stringi::stri_enc_toutf8(body)
+        perCaps <- stringr::str_count(body, "[A-Z]") / stringr::str_length(body)
+        perCaps[stringr::str_length(subjects)==0] <- 0
+        df %>% mutate(perCapsBody = perCaps)
+}
+get_perCapsBody
+get_bodyCharCt
+get_underscore
+get_sub_excl_mark_cnt
+get_sub_ques_mark_cnt
+get_dlr_cnt
+get_priority
+get_numRecip
+get_hour
+get_sub_blank
+get_isDear
+get_isWrote
+get_avgWordLen
+```
+```{r}
+train_df <- train_df %>% 
+        get_processedHeader() %>% 
+        get_contentTypes() %>% 
+        get_attachInfo() %>% 
+        get_isRE() %>% 
+        get_numLines()
+```
+
+
+# The Modeling Problem
+
+# Data
 
 # EDA
 
