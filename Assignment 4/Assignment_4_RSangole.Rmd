@@ -1,5 +1,6 @@
 ---
 title: "Assignment 4"
+author: "Rahul Sangole"
 output: 
   pdf_document: 
     fig_caption: yes
@@ -12,19 +13,20 @@ output:
 library(tidyverse)
 library(ggthemr)
 library(mlr)
-ggthemr("fresh")
+ggthemr("flat")
 library(knitr)
 library(kableExtra)
-library("rpart")
+library("rpart") 
 library("partykit")
 options(knitr.table.format = "latex") 
+knitr::opts_chunk$set(fig.pos = 'H')
 knitr::opts_chunk$set(cache = TRUE,
                       message = FALSE,
                       warning = FALSE,
                       echo = FALSE)
 ```
 
-```{r message=FALSE, warning=FALSE, include=FALSE}
+```{r data-p-1, message=FALSE, warning=FALSE, include=FALSE}
 easy_ham <- fs::dir_ls("large_data/messages/easy_ham/",recursive = T) %>% 
         purrr::map(~read_lines(.x))
 easy_ham_2 <- fs::dir_ls("large_data/messages/easy_ham_2/",recursive = T) %>% 
@@ -37,7 +39,7 @@ spam_2 <- fs::dir_ls("large_data/messages/spam_2/",recursive = T) %>%
         purrr::map(~read_lines(.x))
 ```
 
-```{r message=FALSE, warning=FALSE, include=FALSE}
+```{r data-p-2, message=FALSE, warning=FALSE, include=FALSE}
 split_msg <- function(x){
         split_point = match("", x)
         return(list(
@@ -99,7 +101,7 @@ get_log_odds_pred <- function(test_case){
 }
 ```
 
-```{r}
+```{r data-p-3}
 raw_df <- bind_rows(
         tibble(class = "ham", email = easy_ham),
         tibble(class = "ham", email = easy_ham_2),
@@ -133,6 +135,8 @@ test_df <- test_df %>%
 ```
 
 # The Modeling Problem
+
+The objective of this assignment is to develop classification models which can analyze emails and categorize them as spam or not.
 
 # Data
 
@@ -195,7 +199,7 @@ To prepare the data for the rest of the classification approaches, the following
 
 Ten `tidyverse` functions are writting which allow the dataframes to be altered using pipes. This makes the data preparation steps easy to read, and replicable for both the training and the test datasets. The appendix shows a code sample for this. 
 
-```{r}
+```{r  data-p-4}
 processHeader = function(header)
 {
   # modify the first line to create a key:value pair
@@ -320,7 +324,7 @@ get_numRecipPriority <- function(df){
 }
 ```
 
-```{r}
+```{r data-p-5}
 model_df = raw_df2[train_index,]
 model_test_df = raw_df2[-train_index,]
 model_df <- model_df %>%
@@ -353,9 +357,11 @@ model_test_df <- model_test_df %>%
 model_df %>% 
         dplyr::select(class,isRe,numLines,perCapsSub,perCapsBody,bodyCharCt,underscore,sub_exclMarkCnt,sub_quesMarkCnt,dlrCnt,numRecip,priority) %>% 
         sample_n(4) %>% 
-        kable(digits = 2, caption = "Modeling dataframe with feature engineering variables") %>%
+        kable(digits = 2, caption = "Modeling dataframe with feature engineering variables", booktabs = T) %>%
         kableExtra::kable_styling(latex_options = c("striped", "hold_position","scale_down"))
 ```
+
+\newpage
 
 # EDA
 
@@ -423,7 +429,8 @@ prob_calc_df <- training_bow %>% spread(class,n,fill=0) %>% #ham and spam column
         mutate(log_odds_ratio = log_ratio_present +log_ratio_absent)
 
 prob_calc_df %>%
-        sample_n(4) %>% 
+        arrange(-ham) %>% 
+        head(4) %>% 
         kable(digits = 2, booktabs = T, caption = "Naive Bayes dataframe showing calculations of the log odds ratio for each word in the training dataset") %>%
         kableExtra::kable_styling(latex_options = c("striped", "hold_position","scale_down"))
 ```
@@ -461,8 +468,15 @@ get_fnr_error <- function(threshold){
         mlr::measureFNR(truth = df$class, response = df$pred, negative = "ham", positive = "spam")
 
 }
+get_mmce <- function(threshold){
+        df <- test_df %>%
+                mutate(pred = ifelse(log_odds_pred<threshold,"ham","spam"))
+        mlr::measureMMCE(truth = df$class, response = df$pred)
+
+}
 fpr_errors <- seq(-10,10,by = 0.01) %>% purrr::map_dbl(~get_fpr_error(.x))
 fnr_errors <- seq(-10,10,by = 0.01) %>% purrr::map_dbl(~get_fnr_error(.x))
+mmce_errors <- seq(-10,10,by = 0.01) %>% purrr::map_dbl(~get_mmce(.x))
 tibble(
         threshold = seq(-10,10, by = 0.01),
         FPR_Error = fpr_errors,
@@ -477,7 +491,7 @@ tibble(
 
 ## Model #2: Decision Tree
 
-```{r}
+```{r  data-p-6}
 keep <- c("class",
         "has_attach",
         "isRe",
@@ -505,7 +519,7 @@ model_test_df$class <- factor(model_test_df$class,
 
 A decision tree is built on the training data with tuning parameters `minimum split size` = 20, `minimum bucket size` = 50, `complexity` = 0.01. The performance of this model is modest - 89% accuracy, with a FPR of 0.8 and FNR of 0.91. Per the decision tree, the most important variables seem to be `perCapsBody`, `isRe` and `bodyCharCt`.
 
-```{r message=FALSE, warning=FALSE, out.width='60%', fig.align="center", fig.cap="Decision tree build on the training dataset", fig.height=3.2}
+```{r message=FALSE, warning=FALSE, out.width='80%', fig.align="center", fig.cap="Decision tree build on the training dataset", fig.height=3.2}
 rpFit <- rpart::rpart(formula = class~.,
                data = fit_df,
                control = rpart.control(minsplit = 20,
@@ -525,8 +539,7 @@ rpart.plot(rpFit)
 
 The random forest model has only one important hyperparameter to tune - mtry which is the number of random variables selected for each iteration. This is set to 5, using cross validation to minimize the test set misclassification error.
 
-```{r message=FALSE, warning=FALSE, out.width='60%', fig.align="center", fig.cap="Hyperparameter tuning for `mtry` for random forest using 5 fold cross validation", fig.height=3.2}
-library(randomForest)
+```{r}
 rf_df <- fit_df %>%
         mutate(
                 isRe = ifelse(is.na(isRe), F, isRe),
@@ -541,7 +554,7 @@ rf_df <- fit_df %>%
         map_df(~as.numeric(.x)) %>%
         cbind(class=fit_df$class,.)
 
-rf_test_df <- test_df %>%
+rf_test_df <- model_test_df %>%
         mutate(
                 isRe = ifelse(is.na(isRe), F, isRe),
                 perCapsSub = ifelse(is.na(perCapsSub), 0, perCapsSub),
@@ -553,8 +566,11 @@ rf_test_df <- test_df %>%
                 priority = ifelse(is.na(priority), 0, priority)
         ) %>% .[,-1] %>%
         map_df(~as.numeric(.x)) %>%
-        cbind(class=test_df$class,.)
+        cbind(class=model_test_df$class,.)
+```
 
+```{r message=FALSE, warning=FALSE, out.width='60%', fig.align="center", fig.cap="Hyperparameter tuning for `mtry` for random forest using 5 fold cross validation", fig.height=3.2, fig.width=7}
+library(randomForest)
 tsk <- makeClassifTask(data = rf_df,
                        target = "class",
                        positive = "spam")
@@ -576,7 +592,7 @@ getTuneResultOptPath(res) %>% ggplot(aes(as.numeric(as.character(mtry)),mmce.tes
 
 The model performance is very good. Misclassification error rate for spam messages is 11% while that for ham messages is 1.7%, with an overall error rate of 4.3%. 200 trees are adequate for the errors to stablise. The variable importance plot shows similar variables to the decision tree. 
 
-```{r message=FALSE, warning=FALSE, out.width='60%', fig.align="center", fig.cap="Variable importance plots for random forest model", fig.height=3.2}
+```{r message=FALSE, warning=FALSE, out.width='60%', fig.align="center", fig.cap="Variable importance plots for random forest model", fig.height=6}
 rfFit <- randomForest(x = rf_df[,-1],
                       y = rf_df$class,
                       ntree = 200,
@@ -588,52 +604,78 @@ rfFit <- randomForest(x = rf_df[,-1],
 varImpPlot(rfFit)
 ```
 
-## Model #4: Logistic Regression using the variable selection algorithm of your choice
+## Model #4: Logistic Regression
+
+For this approach, a lasso logistic regression model is fit to the data. Lasso regression offers the advantage of inherent variable selection as coefficient estimates are allowed to go to zero. The only tuning parameter `lambda` which is set at 0.044 after running a 10 fold cross validation and using the 1-SE rule to decide the value. The graph below shows the results of the cross validation.
+
+```{r message=FALSE, warning=FALSE, out.width='60%', fig.align="center", fig.cap="10 fold cross validation result of search for optimal value of `lambda` for lasso logistic regression model", fig.height=3.5}
+library(glmnet)
+cv.glmnet(x = as.matrix(rf_df[,-1]),
+          y = (as.numeric(rf_df$class)-1),
+          type.measure = "mse") %>% plot()
+lassoFit <- glmnet(x = as.matrix(rf_df[,-1]),
+          y = (as.numeric(rf_df$class)-1),
+          alpha = 1,
+          lambda = 0.04392322)
+# lassoPred <- predict(lassoFit, newx = as.matrix(rf_test_df[,-1]))
+# lassoClass <- factor(lassoPred>0.5, levels = c(F,T), labels = c("spam","ham"))
+```
+
+The resulting lasso model eliminates 5 of the 12 variables. The model itself is of mediocre performance, with a misclassificiation error rate of 0.188. While it is possible to improve this model by introducing interaction terms, this was not investigated further.
 
 ```{r}
-library(mlr)
-
-svm_df <- rf_df[,-1] %>% map_df(~as.numeric(.x)) %>% cbind(class=rf_df$class,.)
-svm_test_df <- rf_test_df[,-1] %>% map_df(~as.numeric(.x)) %>% cbind(class=rf_test_df$class,.)
-
-(tsk <- makeClassifTask(id = "reduced_model",
-                        data = svm_df[,c("has_attach", "isRe", "perCapsSub", "perCapsBody", "sub_exclMarkCnt", "numRecip", "priority", "class")],
-                       target = "class",
-                       positive = "spam"))
-(lrn <- makeLearner(cl = "classif.logreg",predict.type = "response"))
-(logFit <- train(lrn,tsk))
-(logPreds <- predict(logFit, newdata = svm_test_df[,c("has_attach", "isRe", "perCapsSub", "perCapsBody", "sub_exclMarkCnt", "numRecip", "priority", "class")]))
-performance(logPreds, measures = list(mmce, fpr, fnr, kappa))
-mlr::calculateConfusionMatrix(logPreds,relative = T)
+coef(lassoFit) %>% as.matrix() %>% as.data.frame() %>% rownames_to_column("variable") %>% rename(beta_estimate=s0) %>% mutate(beta_estimate=as.character(round(beta_estimate,3)),beta_estimate=ifelse(beta_estimate=="0","-",beta_estimate)) %>% kable(caption = "Beta estimates for lasso model", booktabs=T) 
 ```
+
 
 ## Model #5: Support Vector Machine
 
+The final model is a support vector machine classifier, in particular a kernel SVM classifier. There are a variety of kernels avaialble: linear, polynomial, radial, sigmoid, and for each kernel, there is a bandwidth and cost parameter which can be tuned. The choice of the hyper parameters is selected via 10 fold stratified cross validation based grid search across:
+
+* `cost` : 1, 10, 15 or 20
+* `gamma` : 0.1, 0.3 or 0.5
+* `kernel` : linear, polynomial, radial or sigmoid
+
+A total of 480 models are fit (made simpler to define, execute and manage via the `tuneParams` function in `mlr`). The best model was found to be for combination `cost` = 20, `gamma` = 0.5, and `kernel` = radial. 
+
+!["Hyper parameter tuning results for SVM models, using 10 fold cross validation"](images/svm_tune.jpg)
+
+The performance of this model is decent, with a misclassification error rate of 6.8%, with a FPR of 2% and FNR of 20%.
+
 ```{r}
-library(mlr)
-
-svm_df <- rf_df[,-1] %>% map_df(~as.numeric(.x)) %>% cbind(class=rf_df$class,.)
-svm_test_df <- rf_test_df[,-1] %>% map_df(~as.numeric(.x)) %>% cbind(class=rf_test_df$class,.)
-
-tsk <- makeClassifTask(data = svm_df,
-                       target = "class",
-                       positive = "spam")
-lrn <- makeLearner(cl = "classif.svm",predict.type = "response",
-                   par.vals = list(
-                           kernel = "polynomial",
-                           cost = 10,
-                           gamma = 0.3
-                   ))
-svmFit <- train(lrn,tsk)
-
-rdesc = makeResampleDesc("CV", iters = 10, stratify = TRUE)
-resampled_svm <- resample(learner = lrn, task = tsk, resampling = rdesc)
-
-svmPreds <- predict(svmFit, newdata = svm_test_df)
-performance(svmPreds, measures = list(mmce, fpr, fnr,kappa ))
-mlr::calculateConfusionMatrix(svmPreds,relative = T)
+# library(mlr)
+# 
+# svm_df <- rf_df
+# svm_test_df <- rf_test_df
+# 
+# tsk <- makeClassifTask(data = svm_df,
+#                        target = "class",
+#                        positive = "spam")
+# lrn <- makeLearner(cl = "classif.svm",predict.type = "response",
+#                    par.vals = list(
+#                            kernel = "polynomial",
+#                            cost = 10,
+#                            gamma = 0.3
+#                    ))
+# # rdesc = makeResampleDesc("CV", iters = 10, stratify = TRUE)
+# # ps <- makeParamSet(
+# #         makeDiscreteParam("cost", values = c(1,10,15,20)),
+# #         makeDiscreteParam("gamma", values = c(0.1,0.3,0.5)),
+# #         makeDiscreteParam("kernel", values = c("linear","polynomial","radial","sigmoid"))
+# # )
+# # ctrl <- makeTuneControlGrid()
+# # res <- tuneParams(lrn, tsk, rdesc, par.set = ps, control = ctrl)
+# # res$opt.path$env$path %>% mutate(cost=as.numeric(cost),gamma=as.numeric(gamma)) %>% lattice::xyplot(mmce.test.mean~cost|gamma,groups=kernel,.,auto.key = T, type = "b")
+# 
+# lrn = setHyperPars(lrn, par.vals = res$x)
+# svmFit <- train(lrn,tsk)
+# 
+# # resampled_svm <- resample(learner = lrn, task = tsk, resampling = rdesc)
+# 
+# svmPreds <- predict(svmFit, newdata = svm_test_df)
+# performance(svmPreds, measures = list(mmce, fpr, fnr,kappa ))
+# mlr::calculateConfusionMatrix(svmPreds,relative = T)
 ```
-
 
 # Model Comparison
 
@@ -648,35 +690,7 @@ To compare the models against each other, three measures are considered:
 The results discussed in the model comparison below are all for the *test* portion of the hold-out resampling strategy. Finally, the models are also compared by plotting their performance on the Reciever Operating Curve (ROC) and calculating their Area Under the Curve (AUC) values.
 
 ```{r}
-bmr_df <- fit_df %>%
-        mutate(
-                isRe = ifelse(is.na(isRe), F, isRe),
-                perCapsSub = ifelse(is.na(perCapsSub), 0, perCapsSub),
-                underscore = ifelse(is.na(underscore), F, underscore),
-                sub_exclMarkCnt = ifelse(is.na(sub_exclMarkCnt),
-                                         0, sub_exclMarkCnt),
-                sub_quesMarkCnt = ifelse(is.na(sub_quesMarkCnt),
-                                         0, sub_quesMarkCnt),
-                priority = ifelse(is.na(priority), 0, priority)
-        ) %>% .[,-1] %>%
-        map_df(~as.numeric(.x)) %>%
-        cbind(class=fit_df$class,.)
-
-bmr_test_df <- test_df %>%
-        mutate(
-                isRe = ifelse(is.na(isRe), F, isRe),
-                perCapsSub = ifelse(is.na(perCapsSub), 0, perCapsSub),
-                underscore = ifelse(is.na(underscore), F, underscore),
-                sub_exclMarkCnt = ifelse(is.na(sub_exclMarkCnt),
-                                         0, sub_exclMarkCnt),
-                sub_quesMarkCnt = ifelse(is.na(sub_quesMarkCnt),
-                                         0, sub_quesMarkCnt),
-                priority = ifelse(is.na(priority), 0, priority)
-        ) %>% .[,-1] %>%
-        map_df(~as.numeric(.x)) %>%
-        cbind(class=test_df$class,.)
-
-bmr_df <- bmr_df %>% bind_rows(bmr_test_df)
+bmr_df <- rf_df %>% bind_rows(rf_test_df)
 
 tsk <- makeClassifTask(data = bmr_df,
                        target = "class",
@@ -684,14 +698,18 @@ tsk <- makeClassifTask(data = bmr_df,
 lrns <- list(
        makeLearner(id = "svm",
                    cl = "classif.svm",predict.type = "prob",
-                   par.vals = list(kernel = "polynomial")),
-       makeLearner(id = "logreg",
-                   cl = "classif.logreg",predict.type = "prob"),
+                   kernel = "polynomial",
+                   cost = 20, gamma = 0.5),
+       makeLearner(id = "lasso",
+                   cl = "classif.glmnet",predict.type = "prob",
+                   alpha = 1, lambda = 0.04392322),
        makeLearner(id = "rpart",
-                   cl = "classif.rpart", predict.type = "prob"),
+                   cl = "classif.rpart", predict.type = "prob",
+                   minsplit = 20, minbucket = 50, cp = 0.01),
        makeLearner(id = "rf",
                    cl = "classif.randomForest",
-                   predict.type = "prob")
+                   predict.type = "prob",
+                   mtry = 5)
 )
 rdesc = makeResampleDesc(method = "Holdout",
                          split = 0.7,
@@ -700,46 +718,51 @@ meas <- list(mmce, fpr, fnr)
 bmr = benchmark(lrns, tsk, rdesc, meas)
 ```
 
-```{r}
+The point estimates for the test set performance are shown in the figure below. There is a large range of performance across the models. The plot shows the FPR vs the FNR. The sizes of the text are given by the misclassification rates. We can see that the NB model, even though the simplest of them all, out performs the remaining models across all three performance measures. Random forest model comes in a close second place. 
+
+```{r message=FALSE, warning=FALSE, out.width='50%', fig.align="center", fig.cap="Point estimates of test set performance measures for all 5 models", fig.height=4}
 perf = getBMRPerformances(bmr, as.df = TRUE)
 df = reshape2::melt(perf, id.vars = c("task.id", "learner.id", "iter"))
-df %>%
-        ggplot()+
-        geom_line(aes(y = value, x = variable, group=learner.id, color=learner.id))+
-        geom_point(aes(x = variable, y=value, color=learner.id))+
-        labs(x="Test Set Performance Measures", y="Value")
-# qplot(y = value, data = df, x = learner.id,
-#       geom = "dotplot",color=learner.id,
-#       ylab = "performance")+
-#         scale_x_continuous(labels = NULL)+
-#         theme(axis.ticks.x = element_blank(),strip.text = element_text(size = 14))+
-#         facet_grid(~variable, scales = "free")
+df = df %>%  bind_rows(data.frame(task.id="bmr_df", learner.id="nb", iter=1, variable="mmce", value = 0.0142)) %>% 
+        bind_rows(data.frame(task.id="bmr_df", learner.id="nb", iter=1, variable="fpr", value = 0.0164)) %>% 
+        bind_rows(data.frame(task.id="bmr_df", learner.id="nb", iter=1, variable="fnr", value = 0.00759))
+df %>% dplyr::select(learner.id,variable,value) %>% spread(key = "variable", value = "value") %>% ggplot() + geom_text(aes(fnr,fpr,label=learner.id,size=mmce),check_overlap = T)+scale_size_continuous(range = c(3,5))+theme(aspect.ratio = 1)
 ```
 
-```{r}
+The following chart shows the ROC curves for 4 of the 5 models. The ROC curve for the NB model wasn't able to be generated since the NB code was a custom code, as compared to the remaining models which use the `mlr` package's integrated interface. This chart confirms that the random forest model is the best performing, with an AUC of 0.98. SVM, rpart, and lasso models follow, with AUC values of 0.92, 0.91 and 0.89 respectively.
+
+```{r message=FALSE, warning=FALSE, out.width='65%', fig.align="center", fig.cap="ROC curves for 4 of the models", fig.height=4}
 df_thres <- generateThreshVsPerfData(
         list(
-                rf   = getBMRPredictions(bmr,drop = T, learner.ids = "rf"),
-                ksvm = getBMRPredictions(bmr,drop = T, learner.ids = "svm"),
-                rpart = getBMRPredictions(bmr, drop=T, learner.ids = "rpart"),
-                logreg = getBMRPredictions(bmr, drop=T, learner.ids = "logreg")),
+                rf    = getBMRPredictions(bmr, drop = T, learner.ids = "rf"),
+                svm   = getBMRPredictions(bmr, drop = T, learner.ids = "svm"),
+                rpart = getBMRPredictions(bmr, drop = T, learner.ids = "rpart"),
+                lasso = getBMRPredictions(bmr, drop = T, learner.ids = "lasso")),
         measures = list(fpr, tpr))
 plotROCCurves(df_thres)
 ```
 
+The machine learning models using the engineered features could be improved by more feature engineering by exploiting data in the header and attachments. Some feature transformations like Weight Of Evidence could also add predictability for multi-level predictors.
 
+\newpage
 
 # Appendix
 
-train_df %>%
-get_processedHeader() %>%
-get_contentTypes() %>%
-get_attachInfo() %>%
-get_isRE() %>%
-get_numLines() %>%
-get_perCapsSub() %>%
-get_perCapsBody() %>%
-get_underscore() %>%
-get_subMarkCnts() %>%
-get_dlrCnt() %>%
-get_numRecipPriority()
+### Piping of the data processing steps
+
+    > train_df %>%
+    >    get_processedHeader() %>%
+    >    get_contentTypes() %>%
+    >    get_attachInfo() %>%
+    >    get_isRE() %>%
+    >    get_numLines() %>%
+    >    get_perCapsSub() %>%
+    >    get_perCapsBody() %>%
+    >    get_underscore() %>%
+    >    get_subMarkCnts() %>%
+    >    get_dlrCnt() %>%
+    >    get_numRecipPriority()
+
+### Code Base
+
+The code base is stored in github at this [link](https://github.com/rsangole/454_Assignments/tree/master/Assignment%204)
