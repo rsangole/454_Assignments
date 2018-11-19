@@ -15,6 +15,8 @@ library(mlr)
 ggthemr("fresh")
 library(knitr)
 library(kableExtra)
+library("rpart")
+library("partykit")
 options(knitr.table.format = "latex") 
 knitr::opts_chunk$set(cache = TRUE,
                       message = FALSE,
@@ -91,7 +93,7 @@ get_bow <- function(x) {
 get_log_odds_pred <- function(test_case){
         test_case <- test_case[test_case %in% train_bow]
         prob_calc_df %>% 
-                dplyr::filter(word %in% test_case) %>% 
+                dplyr::filter(bow %in% test_case) %>% 
                 pull(log_odds_ratio) %>% 
                 sum()
 }
@@ -156,14 +158,14 @@ The data is processed entirely using a `tidyverse` approach using data preparati
 * If present, the body if the email is extracted sans-attachments
 * The "dirty" header is then processed to a cleaned named-character vector which is used downstream in the latter modeling approaches
 * The body of the emails are extracted into a bag of words after the following clean up activities:
-        + conversion of text to UTF-8 encoding
-        + removal of punctuation
-        + removal of special characters
-        + case conversion to lowercase
-        + removal of numbers
-        + removal of common stop words
-        + removal of excess whitespaces
-        + word stemming
+    - conversion of text to UTF-8 encoding
+    - removal of punctuation
+    - removal of special characters
+    - case conversion to lowercase
+    - removal of numbers
+    - removal of common stop words
+    - removal of excess whitespaces
+    - word stemming
 
 ![Dataframe showing the embedded list-columns for all the preprocessing described above](images/train_df_head.jpg)
 
@@ -188,7 +190,8 @@ To prepare the data for the rest of the classification approaches, the following
 * `underscore` : Does the sender's email have an underscore in it?
 * `subMarkCnts` : How many ? and ! are present in the body?
 * `dlrCnt` : How many $ are present in the body?
-* `numRecipPriority` : What is the priority tag of the email?
+* `numRecip`: How many people is the email sent to?
+* `Priority` : What is the priority tag of the email?
 
 Ten `tidyverse` functions are writting which allow the dataframes to be altered using pipes. This makes the data preparation steps easy to read, and replicable for both the training and the test datasets. The appendix shows a code sample for this. 
 
@@ -354,16 +357,11 @@ model_df %>%
         kableExtra::kable_styling(latex_options = c("striped", "hold_position","scale_down"))
 ```
 
-
-## Train & Test Splits
-
-A resampling strategy of a 70-30 Holdout for train and testing is adopted for all the models.The splits are stratified on the response variable to keep the probability distributions constant across the two sets. While building some of the machine learning models, 10-fold cross validation is used while hyper parameter tuning. This cross validation is performed on the 70% training split only to determine the optimal values of the tuning parameters. The resulting datasets are 6,055 and 2,616 long for training and testing respectively.
-
 # EDA
 
 Some basic univariate and bivariate exploration shows us some key predictors towards deciding if an email is spam or not. In the figure below, we can see that almost all messages marked priority 1, 2 or 5 are spam messages. Priority 3 (which is usually the default in most email service applications) is nearly an equal split between the two classes. The graph to the right shows the splits by `isRe` which measures if the subject starts with 'Re:'. Here, we can see that almost all email messages which do start with 'Re:' are not spam.
 
-```{r out.width='50%', fig.height=4, fig.width=9, message=FALSE, warning=FALSE, fig.cap="Exploratory Data Analysis showing a few predictor variables which show markedly different distributions for ham vs spam", fig.align="center"}
+```{r out.width='70%', fig.height=4, fig.width=9, message=FALSE, warning=FALSE, fig.cap="Exploratory Data Analysis showing a few predictor variables which show markedly different distributions for ham vs spam", fig.align="center"}
 model_df %>% 
         ggplot()+
         geom_bar(aes(priority, fill=class), position = "fill") + 
@@ -389,7 +387,19 @@ In total, 5 models are built:
 While investigating the models 2-5, the packages mentioned above are used. `caret` is used for some hyper-parameter tuning. Finally, to compare all the models together, the `mlr` package is used which offers the excellent `benchmark` functionality with associated plotting and model comparison tools. 
 
 
+## Resampling & Validation Strategy
+
+The model evaluation strategy of a 70-30 Holdout for train and testing is adopted for all the models. The splits are stratified on the response variable to keep the probability distributions consistant across the two sets. 
+
+The resulting datasets are 6,055 and 2,616 long for training and testing respectively.
+
+A 10-fold cross validation resampling strategy is used while hyper parameter tuning some of the machine learning models. This cross validation is performed on the 70% training split only.
+
 ## Model #1: Naive Bayes
+
+For the naive bayes model, the objective is to count the relative frequencies of each word in the spam and ham emails. Based on these observed frequencies in the training dataset, a prior model is build. Then, for each email in the test dataset, the priors are used to calculate a log odds ratio. If the log odds ratio is less than a threshold (we start out with 0 as the threshold), then the email is classified as ham. If the ratio is positive, the email is classified as spam. 
+
+This logic is applied to the dataset prepared for NB modeling. A sample dataframe is shown below.
 
 ```{r}
 n_ham_messages <- sum(train_df$class=="ham")
@@ -405,27 +415,31 @@ prob_calc_df <- training_bow %>% spread(class,n,fill=0) %>% #ham and spam column
                 log_ratio_absent = log(spam_absent_ratio) - log(ham_absent_ratio)
 
         ) %>%
-        select(
-                word = bow,
-                log_ratio_present,
-                log_ratio_absent
-        ) %>%
+        # select(
+        #         word = bow,
+        #         log_ratio_present,
+        #         log_ratio_absent
+        # ) %>%
         mutate(log_odds_ratio = log_ratio_present +log_ratio_absent)
+
+prob_calc_df %>%
+        sample_n(4) %>% 
+        kable(digits = 2, booktabs = T, caption = "Naive Bayes dataframe showing calculations of the log odds ratio for each word in the training dataset") %>%
+        kableExtra::kable_styling(latex_options = c("striped", "hold_position","scale_down"))
 ```
 
 ```{r}
-train_bow <- prob_calc_df %>% pull(word)
+train_bow <- prob_calc_df %>% pull(bow)
 test_df <- test_df %>%
         mutate(log_odds_pred = map_dbl(test_df$bow, ~get_log_odds_pred(.x)),
                pred = ifelse(log_odds_pred<0,"ham","spam"))
 ```
 
-```{r}
-mlr::measureMMCE(test_df$class,test_df$pred)
-mlr::measureFPR(test_df$class, test_df$pred, positive = "spam", negative = "ham")
-```
+Since this modeling approach uses priors calculated from the training dataset, this method only works for words which the model has already seen before. Thus, the method does require a large sample size of representative spam and ham data to be able to make good calls. In this exercise, there seems to be enough data, given that the test set performance is quite good. The mmce for the test set is `r round(mlr::measureMMCE(test_df$class,test_df$pred), 3)`, with the fpr and fnr at `r round(mlr::measureFPR(test_df$class, test_df$pred, positive = "spam", negative = "ham"), 3)` and `r round(mlr::measureFNR(test_df$class, test_df$pred, positive = "spam", negative = "ham"), 3)` respectively.
 
-```{r message=FALSE, warning=FALSE}
+We can visualize the distributions of the ham and spam log odds ratio calculations as shown in the figure below. The clear separation of the two density distributes shows us that the model performs exceptionally well for being such a simple (or naive) approach towards classification.
+
+```{r message=FALSE, warning=FALSE, out.width='60%', fig.align="center", fig.cap="Density plots showing the difference in the log odds ratio between the spam and ham messages for the NB model applied to the test dataset"}
 test_df %>%
         ggplot()+
         geom_vline(xintercept = 0,color='forestgreen',lty=2)+
@@ -433,7 +447,9 @@ test_df %>%
         scale_x_continuous(limits = c(-400,400))
 ```
 
-```{r}
+The threshold used to classify spam vs ham in the scenario above is 0. However, it is possible to trade off FPR for FNR by varying the threshold value. This is investigated and plotted below. By increasing the threshold, a larger number of emails are correctly classified as ham, at the risk of misclassifying correct emails as spam.
+
+```{r message=FALSE, warning=FALSE, out.width='60%', fig.align="center", fig.cap="Change in FPR and FNR as the threshold for classifying spam message is varyied from -10 to 10. The dotted line at 2.75 shows where the two error rates are equal."}
 get_fpr_error <- function(threshold){
         df <- test_df %>%
                 mutate(pred = ifelse(log_odds_pred<threshold,"ham","spam"))
@@ -459,153 +475,164 @@ tibble(
         theme(legend.position = "top")
 ```
 
+## Model #2: Decision Tree
+
 ```{r}
-tibble(
-        threshold = seq(-10,10,by = 0.01),
-        FPR_Error = fpr_errors,
-        FNR_Error = fnr_errors
-) %>% mutate(equal = round(FPR_Error,digits = 3)==round(FNR_Error,digits=3)) %>% dplyr::filter(threshold==2.75)
+keep <- c("class",
+        "has_attach",
+        "isRe",
+        "numLines",
+        "perCapsSub",
+        "perCapsBody",
+        "bodyCharCt",
+        "underscore",
+        "sub_exclMarkCnt",
+        "sub_quesMarkCnt",
+        "dlrCnt",
+        "numRecip",
+        "priority")
+
+fit_df <- model_df[,keep]
+model_test_df <- model_test_df[,keep]
+
+fit_df$class <- factor(fit_df$class,
+                         levels = c("spam","ham"),
+                         labels = c("spam","ham"))
+model_test_df$class <- factor(model_test_df$class,
+                         levels = c("spam","ham"),
+                         labels = c("spam","ham"))
 ```
 
+A decision tree is built on the training data with tuning parameters `minimum split size` = 20, `minimum bucket size` = 50, `complexity` = 0.01. The performance of this model is modest - 89% accuracy, with a FPR of 0.8 and FNR of 0.91. Per the decision tree, the most important variables seem to be `perCapsBody`, `isRe` and `bodyCharCt`.
 
+```{r message=FALSE, warning=FALSE, out.width='60%', fig.align="center", fig.cap="Decision tree build on the training dataset", fig.height=3.2}
+rpFit <- rpart::rpart(formula = class~.,
+               data = fit_df,
+               control = rpart.control(minsplit = 20,
+                                       minbucket = 50,
+                                       cp = 0.01))
+rpPred <- predict(rpFit, model_test_df[,-1])
+rpPredClass <- rpPred[,"spam"]>0.5
+rpPredClass <- factor(rpPredClass,
+                         levels = c(T,F),
+                         labels = c("spam","ham"))
+#caret::confusionMatrix(rpPredClass, model_test_df$class)
+library(rpart.plot)
+rpart.plot(rpFit)
+```
 
-<!-- ######## -->
+## Model #3: Random Forest
 
-<!-- <!-- PARTITIONING DATA PREP --> -->
+The random forest model has only one important hyperparameter to tune - mtry which is the number of random variables selected for each iteration. This is set to 5, using cross validation to minimize the test set misclassification error.
 
+```{r message=FALSE, warning=FALSE, out.width='60%', fig.align="center", fig.cap="Hyperparameter tuning for `mtry` for random forest using 5 fold cross validation", fig.height=3.2}
+library(randomForest)
+rf_df <- fit_df %>%
+        mutate(
+                isRe = ifelse(is.na(isRe), F, isRe),
+                perCapsSub = ifelse(is.na(perCapsSub), 0, perCapsSub),
+                underscore = ifelse(is.na(underscore), F, underscore),
+                sub_exclMarkCnt = ifelse(is.na(sub_exclMarkCnt),
+                                         0, sub_exclMarkCnt),
+                sub_quesMarkCnt = ifelse(is.na(sub_quesMarkCnt),
+                                         0, sub_quesMarkCnt),
+                priority = ifelse(is.na(priority), 0, priority)
+        ) %>% .[,-1] %>%
+        map_df(~as.numeric(.x)) %>%
+        cbind(class=fit_df$class,.)
 
-<!-- ```{r} -->
-<!-- keep <- c("class", -->
-<!--         "has_attach", -->
-<!--         "isRe", -->
-<!--         "numLines", -->
-<!--         "perCapsSub", -->
-<!--         "perCapsBody", -->
-<!--         "bodyCharCt", -->
-<!--         "underscore", -->
-<!--         "sub_exclMarkCnt", -->
-<!--         "sub_quesMarkCnt", -->
-<!--         "dlrCnt", -->
-<!--         "numRecip", -->
-<!--         "priority") -->
-<!-- fit_df <- model_df[,keep] -->
-<!-- model_test_df <- model_test_df[,keep] -->
-<!-- fit_df$class <- factor(fit_df$class, -->
-<!--                          levels = c("spam","ham"), -->
-<!--                          labels = c("spam","ham")) -->
-<!-- model_test_df$class <- factor(model_test_df$class, -->
-<!--                          levels = c("spam","ham"), -->
-<!--                          labels = c("spam","ham")) -->
-<!-- ``` -->
+rf_test_df <- test_df %>%
+        mutate(
+                isRe = ifelse(is.na(isRe), F, isRe),
+                perCapsSub = ifelse(is.na(perCapsSub), 0, perCapsSub),
+                underscore = ifelse(is.na(underscore), F, underscore),
+                sub_exclMarkCnt = ifelse(is.na(sub_exclMarkCnt),
+                                         0, sub_exclMarkCnt),
+                sub_quesMarkCnt = ifelse(is.na(sub_quesMarkCnt),
+                                         0, sub_quesMarkCnt),
+                priority = ifelse(is.na(priority), 0, priority)
+        ) %>% .[,-1] %>%
+        map_df(~as.numeric(.x)) %>%
+        cbind(class=test_df$class,.)
 
-<!-- ######## -->
+tsk <- makeClassifTask(data = rf_df,
+                       target = "class",
+                       positive = "spam")
+lrns <- makeLearner(id = "rf",
+                   cl = "classif.randomForest",
+                   predict.type = "prob")
+rdesc = makeResampleDesc(method = "CV",
+                         iters = 5,
+                         stratify = TRUE)
+meas <- list(mmce, fpr, fnr)
+ps = makeParamSet(
+  makeDiscreteParam("mtry", values = c(3,5,8,10))
+)
+ctrl <- makeTuneControlGrid()
+res <- tuneParams(lrns,tsk,rdesc,meas,ps,ctrl)
 
+getTuneResultOptPath(res) %>% ggplot(aes(as.numeric(as.character(mtry)),mmce.test.mean)) + geom_line() + geom_point() + scale_x_continuous(breaks = c(3,5,8,10)) + labs(x="mtry")
+```
 
-<!-- ## Model #2: Decision Tree -->
+The model performance is very good. Misclassification error rate for spam messages is 11% while that for ham messages is 1.7%, with an overall error rate of 4.3%. 200 trees are adequate for the errors to stablise. The variable importance plot shows similar variables to the decision tree. 
 
-<!-- ```{r} -->
-<!-- library(rpart) -->
-<!-- rpFit <- rpart(formula = class~.,  -->
-<!--                data = fit_df, -->
-<!--                control = rpart.control(minsplit = 20, -->
-<!--                                        minbucket = 50, -->
-<!--                                        cp = 0.01)) -->
-<!-- rpFit -->
+```{r message=FALSE, warning=FALSE, out.width='60%', fig.align="center", fig.cap="Variable importance plots for random forest model", fig.height=3.2}
+rfFit <- randomForest(x = rf_df[,-1],
+                      y = rf_df$class,
+                      ntree = 200,
+                      mtry = 5,
+                      xtest = rf_test_df[,-1],
+                      ytest = rf_test_df$class,
+                      replace = T,
+                      importance = T)
+varImpPlot(rfFit)
+```
 
-<!-- rpPred <- predict(rpFit, model_test_df[,-1]) -->
-<!-- rpPredClass <- rpPred[,"spam"]>0.5 -->
-<!-- rpPredClass <- factor(rpPredClass, -->
-<!--                          levels = c(T,F), -->
-<!--                          labels = c("spam","ham")) -->
+## Model #4: Logistic Regression using the variable selection algorithm of your choice
 
-<!-- caret::confusionMatrix(rpPredClass,model_test_df$class) -->
-<!-- ``` -->
+```{r}
+library(mlr)
 
+svm_df <- rf_df[,-1] %>% map_df(~as.numeric(.x)) %>% cbind(class=rf_df$class,.)
+svm_test_df <- rf_test_df[,-1] %>% map_df(~as.numeric(.x)) %>% cbind(class=rf_test_df$class,.)
 
-<!-- ## Model #3: Random Forest -->
+(tsk <- makeClassifTask(id = "reduced_model",
+                        data = svm_df[,c("has_attach", "isRe", "perCapsSub", "perCapsBody", "sub_exclMarkCnt", "numRecip", "priority", "class")],
+                       target = "class",
+                       positive = "spam"))
+(lrn <- makeLearner(cl = "classif.logreg",predict.type = "response"))
+(logFit <- train(lrn,tsk))
+(logPreds <- predict(logFit, newdata = svm_test_df[,c("has_attach", "isRe", "perCapsSub", "perCapsBody", "sub_exclMarkCnt", "numRecip", "priority", "class")]))
+performance(logPreds, measures = list(mmce, fpr, fnr, kappa))
+mlr::calculateConfusionMatrix(logPreds,relative = T)
+```
 
-<!-- ```{r} -->
-<!-- library(randomForest) -->
-<!-- rf_df <- fit_df %>%  -->
-<!--         mutate( -->
-<!--                 isRe = ifelse(is.na(isRe), F, isRe), -->
-<!--                 perCapsSub = ifelse(is.na(perCapsSub), 0, perCapsSub), -->
-<!--                 underscore = ifelse(is.na(underscore), F, underscore), -->
-<!--                 sub_exclMarkCnt = ifelse(is.na(sub_exclMarkCnt), 0, sub_exclMarkCnt), -->
-<!--                 sub_quesMarkCnt = ifelse(is.na(sub_quesMarkCnt), 0, sub_quesMarkCnt), -->
-<!--                 priority = ifelse(is.na(priority), 0, priority) -->
-<!--         ) -->
-<!-- rf_test_df <- model_test_df %>%  -->
-<!--         mutate( -->
-<!--                 isRe = ifelse(is.na(isRe), F, isRe), -->
-<!--                 perCapsSub = ifelse(is.na(perCapsSub), 0, perCapsSub), -->
-<!--                 underscore = ifelse(is.na(underscore), F, underscore), -->
-<!--                 sub_exclMarkCnt = ifelse(is.na(sub_exclMarkCnt),  -->
-<!--                                          0, sub_exclMarkCnt), -->
-<!--                 sub_quesMarkCnt = ifelse(is.na(sub_quesMarkCnt),  -->
-<!--                                          0, sub_quesMarkCnt), -->
-<!--                 priority = ifelse(is.na(priority), 0, priority) -->
-<!--         ) -->
+## Model #5: Support Vector Machine
 
-<!-- rfFit <- randomForest(x = rf_df[,-1], -->
-<!--                       y = rf_df$class, -->
-<!--                       ntree = 200, -->
-<!--                       mtry = 5, -->
-<!--                       xtest = rf_test_df[,-1], -->
-<!--                       ytest = rf_test_df$class, -->
-<!--                       replace = T, -->
-<!--                       importance = T) -->
-<!-- rfFit -->
-<!-- plot(rfFit) -->
-<!-- varImpPlot(rfFit) -->
-<!-- ``` -->
+```{r}
+library(mlr)
 
+svm_df <- rf_df[,-1] %>% map_df(~as.numeric(.x)) %>% cbind(class=rf_df$class,.)
+svm_test_df <- rf_test_df[,-1] %>% map_df(~as.numeric(.x)) %>% cbind(class=rf_test_df$class,.)
 
-<!-- ## Model #4: Logistic Regression using the variable selection algorithm of your choice  -->
+tsk <- makeClassifTask(data = svm_df,
+                       target = "class",
+                       positive = "spam")
+lrn <- makeLearner(cl = "classif.svm",predict.type = "response",
+                   par.vals = list(
+                           kernel = "polynomial",
+                           cost = 10,
+                           gamma = 0.3
+                   ))
+svmFit <- train(lrn,tsk)
 
-<!-- ```{r} -->
-<!-- library(mlr) -->
+rdesc = makeResampleDesc("CV", iters = 10, stratify = TRUE)
+resampled_svm <- resample(learner = lrn, task = tsk, resampling = rdesc)
 
-<!-- svm_df <- rf_df[,-1] %>% map_df(~as.numeric(.x)) %>% cbind(class=rf_df$class,.) -->
-<!-- svm_test_df <- rf_test_df[,-1] %>% map_df(~as.numeric(.x)) %>% cbind(class=rf_test_df$class,.) -->
-
-<!-- (tsk <- makeClassifTask(id = "reduced_model", -->
-<!--                         data = svm_df[,c("has_attach", "isRe", "perCapsSub", "perCapsBody", "sub_exclMarkCnt", "numRecip", "priority", "class")], -->
-<!--                        target = "class", -->
-<!--                        positive = "spam")) -->
-<!-- (lrn <- makeLearner(cl = "classif.logreg",predict.type = "response")) -->
-<!-- (logFit <- train(lrn,tsk)) -->
-<!-- (logPreds <- predict(logFit, newdata = svm_test_df[,c("has_attach", "isRe", "perCapsSub", "perCapsBody", "sub_exclMarkCnt", "numRecip", "priority", "class")])) -->
-<!-- performance(logPreds, measures = list(mmce, fpr, fnr, kappa)) -->
-<!-- mlr::calculateConfusionMatrix(logPreds,relative = T) -->
-<!-- ``` -->
-
-<!-- ## Model #5: Support Vector Machine -->
-
-<!-- ```{r} -->
-<!-- library(mlr) -->
-
-<!-- svm_df <- rf_df[,-1] %>% map_df(~as.numeric(.x)) %>% cbind(class=rf_df$class,.) -->
-<!-- svm_test_df <- rf_test_df[,-1] %>% map_df(~as.numeric(.x)) %>% cbind(class=rf_test_df$class,.) -->
-
-<!-- tsk <- makeClassifTask(data = svm_df, -->
-<!--                        target = "class", -->
-<!--                        positive = "spam") -->
-<!-- lrn <- makeLearner(cl = "classif.svm",predict.type = "response", -->
-<!--                    par.vals = list( -->
-<!--                            kernel = "polynomial", -->
-<!--                            cost = 10, -->
-<!--                            gamma = 0.3 -->
-<!--                    )) -->
-<!-- svmFit <- train(lrn,tsk) -->
-
-<!-- rdesc = makeResampleDesc("CV", iters = 10, stratify = TRUE) -->
-<!-- resampled_svm <- resample(learner = lrn, task = tsk, resampling = rdesc) -->
-
-<!-- svmPreds <- predict(svmFit, newdata = svm_test_df) -->
-<!-- performance(svmPreds, measures = list(mmce, fpr, fnr,kappa )) -->
-<!-- mlr::calculateConfusionMatrix(svmPreds,relative = T) -->
-<!-- ``` -->
+svmPreds <- predict(svmFit, newdata = svm_test_df)
+performance(svmPreds, measures = list(mmce, fpr, fnr,kappa ))
+mlr::calculateConfusionMatrix(svmPreds,relative = T)
+```
 
 
 # Model Comparison
