@@ -1,22 +1,28 @@
 ---
 title: "Assignment 4"
 output: 
-  html_notebook: 
-    fig_height: 6
-    fig_width: 9
-    highlight: zenburn
-    theme: simplex
-    toc: yes
+  pdf_document: 
+    fig_caption: yes
+    fig_height: 5
+    fig_width: 8
+    highlight: espresso
 ---
 
-```{r}
+```{r include=FALSE}
 library(tidyverse)
-library(caret)
+library(ggthemr)
+library(mlr)
+ggthemr("fresh")
+library(knitr)
+library(kableExtra)
+options(knitr.table.format = "latex") 
+knitr::opts_chunk$set(cache = TRUE,
+                      message = FALSE,
+                      warning = FALSE,
+                      echo = FALSE)
 ```
 
-<!-- NAIVE BAYES CODE -->
-
-```{r}
+```{r message=FALSE, warning=FALSE, include=FALSE}
 easy_ham <- fs::dir_ls("large_data/messages/easy_ham/",recursive = T) %>% 
         purrr::map(~read_lines(.x))
 easy_ham_2 <- fs::dir_ls("large_data/messages/easy_ham_2/",recursive = T) %>% 
@@ -29,7 +35,7 @@ spam_2 <- fs::dir_ls("large_data/messages/spam_2/",recursive = T) %>%
         purrr::map(~read_lines(.x))
 ```
 
-```{r}
+```{r message=FALSE, warning=FALSE, include=FALSE}
 split_msg <- function(x){
         split_point = match("", x)
         return(list(
@@ -110,18 +116,12 @@ raw_df2 <- raw_df %>%
                 body_no_attach = map2(body, bndries, ~drop_attachments(.x, .y))
         ) %>% 
         select(-email,-splits)
-raw_df2
-```
-```{r}
+
 train_index <- caret::createDataPartition(y = raw_df2$class, p = 0.7, list = F)
 
 train_df = raw_df2[train_index,]
 test_df = raw_df2[-train_index,]
-
-train_df %>% janitor::tabyl(class)
-test_df %>% janitor::tabyl(class)
-```
-```{r}
+ 
 train_df <- train_df %>% 
         mutate(bow = map(body_no_attach, possibly(~get_bow(.x),otherwise = NA))) %>%
         dplyr::filter(bow %>% map_lgl(~!is.logical(.x)))
@@ -130,12 +130,268 @@ test_df <- test_df %>%
         dplyr::filter(bow %>% map_lgl(~!is.logical(.x)))
 ```
 
+# The Modeling Problem
+
+# Data
+
+The emails are provided as individual ascii files. There are a total of 9,362 files totaling roughly 114 MB on disk. The data in the files is not clean - neither is the data in a long or short dataframe format, nor is it formatted in a cleaned and consistent key-value dictionary pair format. The following shows the first 10 lines for one of the emails. We can see that these data are a mixture lines without key-value pair formatting (line 1), and some approximate key-value pair ":" separated formatting.
+
+        From ilug-admin@linux.ie  Mon Sep  2 13:13:50 2002
+        Return-Path: <ilug-admin@linux.ie>
+        Delivered-To: zzzz@localhost.netnoteinc.com
+        Received: from localhost (localhost [127.0.0.1])
+        	by phobos.labs.netnoteinc.com (Postfix) with ESMTP id 6A0CD47C7C
+        	for <zzzz@localhost>; Mon,  2 Sep 2002 07:43:01 -0400 (EDT)
+        Received: from phobos [127.0.0.1]
+
+Each file is marked `spam` or `ham`, the two classes to predict. The preparation of the data for modeling differed between the Naive Bayes approach - which requires a word frequency based approach for the two classes - and the classification algorithms like randomForest, Support Vector Machine, decision trees, and logistic regression - which require features to be extracted from the email corpus.
+
+## Data Preparation
+
+The data is processed entirely using a `tidyverse` approach using data preparation verbs from `dplyr`, `readr` and `tidyr`. Fundamentally, each file is stored "within" a dataframe as an object [this is using the *list-columns* feature of `tibbles`]. Thus, we start with a dataframe which is 9,362 rows by 2 columns [class and raw data]. For each data operation performed, a new column is added which appends a column holding the transformed data objects. To prepare the data for the NB model, the following steps are taken.
+
+* All 9,362 files are read into a tibble. Each file is read in line by line, and stored as a  character vector of the length of each respective file.
+* Each email is split into header and body sections
+* For each email, we check if attachments are present
+* If present, the body if the email is extracted sans-attachments
+* The "dirty" header is then processed to a cleaned named-character vector which is used downstream in the latter modeling approaches
+* The body of the emails are extracted into a bag of words after the following clean up activities:
+        + conversion of text to UTF-8 encoding
+        + removal of punctuation
+        + removal of special characters
+        + case conversion to lowercase
+        + removal of numbers
+        + removal of common stop words
+        + removal of excess whitespaces
+        + word stemming
+
+![Dataframe showing the embedded list-columns for all the preprocessing described above](images/train_df_head.jpg)
+
+A total of 7 functions in R achieve this initial cleanup. Thereafter, the list of bag of words is converted to a term-frequency matrix, which stores the number of emails containing each unique word grouped by the response variable. Table 1 shows a few lines from this matrix.
 
 ```{r}
 nested_df <- train_df %>% tidyr::nest(-class)
 
 training_bow <- nested_df$data[[1]] %>% pull(bow) %>% unlist() %>% tibble(bow = .) %>% count(bow) %>% mutate(class = "ham") %>% bind_rows(nested_df$data[[2]] %>% pull(bow) %>% unlist() %>% tibble(bow = .) %>% count(bow) %>% mutate(class = "spam"))
 
+training_bow %>% arrange(-n) %>% group_by(class) %>% slice(1:2) %>% kable(booktabs = T, caption = "Word frequency count, by class") %>% kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+## Data Dictionary
+
+To prepare the data for the rest of the classification approaches, the following features are created:
+
+* `isRE` : Does the subject line start with Re?
+* `numLines` : How many lines are in the body, sans attachment?
+* `perCapsSub` : Number of capital letters in the subject
+* `perCapsBody` : Number of capital letters in the body
+* `underscore` : Does the sender's email have an underscore in it?
+* `subMarkCnts` : How many ? and ! are present in the body?
+* `dlrCnt` : How many $ are present in the body?
+* `numRecipPriority` : What is the priority tag of the email?
+
+Ten `tidyverse` functions are writting which allow the dataframes to be altered using pipes. This makes the data preparation steps easy to read, and replicable for both the training and the test datasets. The appendix shows a code sample for this. 
+
+```{r}
+processHeader = function(header)
+{
+  # modify the first line to create a key:value pair
+  header[1] = sub("^From", "Top-From:", header[1])
+
+  headerMat = read.dcf(textConnection(header), all = TRUE)
+  headerVec = unlist(headerMat)
+
+  dupKeys = sapply(headerMat, function(x) length(unlist(x)))
+  names(headerVec) = rep(colnames(headerMat), dupKeys)
+  
+  return(headerVec)
+}
+processAttach = function(body, contentType){
+
+  n = length(body)
+  boundary = get_boundary(contentType)
+
+  bString = paste("--", boundary, sep = "")
+  bStringLocs = which(bString == body)
+  eString = paste("--", boundary, "--", sep = "")
+  eStringLoc = which(eString == body)
+
+  if (length(eStringLoc) == 0) eStringLoc = n
+  if (length(bStringLocs) <= 1) {
+    attachLocs = NULL
+    msgLastLine = n
+    if (length(bStringLocs) == 0) bStringLocs = 0
+  } else {
+    attachLocs = c(bStringLocs[ -1 ],  eStringLoc)
+    msgLastLine = bStringLocs[2] - 1
+  }
+
+  msg = body[ (bStringLocs[1] + 1) : msgLastLine]
+  if ( eStringLoc < n )
+    msg = c(msg, body[ (eStringLoc + 1) : n ])
+
+  if ( !is.null(attachLocs) ) {
+    attachLens = diff(attachLocs, lag = 1)
+    attachTypes = mapply(function(begL, endL) {
+      CTloc = grep("^[Cc]ontent-[Tt]ype", body[ (begL + 1) : (endL - 1)])
+      if ( length(CTloc) == 0 ) {
+        MIMEType = NA
+      } else {
+        CTval = body[ begL + CTloc[1] ]
+        CTval = gsub('"', "", CTval )
+        MIMEType = sub(" *[Cc]ontent-[Tt]ype: *([^;]*);?.*", "\\1", CTval)
+      }
+      return(MIMEType)
+    }, attachLocs[-length(attachLocs)], attachLocs[-1])
+  }
+
+  if (is.null(attachLocs)) return(list(body = msg, attachDF = NULL) )
+  return(list(body = msg,
+             attachDF = data.frame(aLen = attachLens,
+                                     aType = unlist(attachTypes),
+                                     stringsAsFactors = FALSE)))
+}
+get_processedHeader <- function(df){
+        df %>%
+                mutate(header_processed = map(header,possibly(~processHeader(.x),otherwise = NA)))
+}
+get_contentTypes <- function(df){
+        df %>%
+                mutate(content_types = map_chr(header_processed, ~.x["Content-Type"]))
+}
+get_attachInfo <- function(df){
+        df %>%
+                mutate(attach_info = map2(.x = body,.y = content_types,.f = ~processAttach(.x, .y)[[2]]))
+}
+get_isRE <- function(df){
+        df %>%
+                mutate(isRe = map_lgl(header_processed,
+                                      possibly(~(ifelse(nchar(.x["Subject"])==0,
+                                               NA,
+                                               length(grep("^[ ]*Re:", .x["Subject"]))>0)
+                                        ), otherwise = NA)))
+}
+get_numLines <- function(df){
+         df %>%
+                mutate(numLines = map_int(body_no_attach, ~length(.x)))
+}
+get_perCapsSub <- function(df){
+        subjects <- map(df$header_processed,~.x["Subject"]) %>%
+                unlist() %>%
+                tm::removePunctuation()
+        subjects <- stringi::stri_encode(subjects)
+        perCaps <- stringr::str_count(subjects, "[A-Z]") / stringr::str_length(subjects)
+        perCaps[stringr::str_length(subjects)==0] <- 0
+        df %>% mutate(perCapsSub = round(perCaps,3))
+}
+get_perCapsBody <- function(df){
+        body_ <- map(df$body_no_attach,~paste(.x, collapse = " ")) %>% unlist()
+        body_ <- tm::removePunctuation(body_)
+        body_ <- stringi::stri_encode(body_)
+        perCaps <- stringr::str_count(body_, "[A-Z]") / stringr::str_length(body_)
+        df %>% mutate(perCapsBody = round(perCaps,3),
+                      bodyCharCt = stringr::str_length(body_))
+}
+get_underscore <- function(df){
+        emails <- map(df$header_processed,~.x["From"]) %>%
+                unlist() %>%
+                stringr::str_extract(pattern = "(?!\\<)[\\w\\d\\s\\.\\-\\@]*(?=\\>)")
+        df %>% mutate(underscore = stringr::str_detect(emails, "_"))
+}
+get_subMarkCnts <- function(df){
+        subjects <- map(df$header_processed,~.x["Subject"]) %>%
+                unlist() %>%
+                stringi::stri_encode()
+        df %>% mutate(
+                sub_exclMarkCnt = stringr::str_count(subjects, "!"),
+                sub_quesMarkCnt = stringr::str_count(subjects, "\\?"))
+}
+get_dlrCnt <- function(df){
+        body_ <- map(df$body_no_attach,~paste(.x, collapse = " ")) %>% unlist() %>% stringi::stri_encode()
+        df %>% mutate(dlrCnt = stringr::str_count(body_,"\\$"))
+}
+get_numRecipPriority <- function(df){
+        df %>% mutate(numRecip=map_int(header_processed,~(sum(names(.x)=="Delivered-To"))),
+                      priority=map_chr(header_processed, ~(.x["X-Priority"]) %>% stringr::str_extract("\\d")),
+                      priority=as.numeric(priority))
+}
+```
+
+```{r}
+model_df = raw_df2[train_index,]
+model_test_df = raw_df2[-train_index,]
+model_df <- model_df %>%
+        get_processedHeader() %>%
+        get_contentTypes() %>%
+        get_attachInfo() %>%
+        get_isRE() %>%
+        get_numLines() %>%
+        get_perCapsSub() %>%
+        get_perCapsBody() %>%
+        get_underscore() %>%
+        get_subMarkCnts() %>%
+        get_dlrCnt() %>%
+        get_numRecipPriority()
+model_test_df <- model_test_df %>%
+        get_processedHeader() %>%
+        get_contentTypes() %>%
+        get_attachInfo() %>%
+        get_isRE() %>%
+        get_numLines() %>%
+        get_perCapsSub() %>%
+        get_perCapsBody() %>%
+        get_underscore() %>%
+        get_subMarkCnts() %>%
+        get_dlrCnt() %>%
+        get_numRecipPriority()
+```
+
+```{r}
+model_df %>% 
+        dplyr::select(class,isRe,numLines,perCapsSub,perCapsBody,bodyCharCt,underscore,sub_exclMarkCnt,sub_quesMarkCnt,dlrCnt,numRecip,priority) %>% 
+        sample_n(4) %>% 
+        kable(digits = 2, caption = "Modeling dataframe with feature engineering variables") %>%
+        kableExtra::kable_styling(latex_options = c("striped", "hold_position","scale_down"))
+```
+
+
+## Train & Test Splits
+
+A resampling strategy of a 70-30 Holdout for train and testing is adopted for all the models.The splits are stratified on the response variable to keep the probability distributions constant across the two sets. While building some of the machine learning models, 10-fold cross validation is used while hyper parameter tuning. This cross validation is performed on the 70% training split only to determine the optimal values of the tuning parameters. The resulting datasets are 6,055 and 2,616 long for training and testing respectively.
+
+# EDA
+
+Some basic univariate and bivariate exploration shows us some key predictors towards deciding if an email is spam or not. In the figure below, we can see that almost all messages marked priority 1, 2 or 5 are spam messages. Priority 3 (which is usually the default in most email service applications) is nearly an equal split between the two classes. The graph to the right shows the splits by `isRe` which measures if the subject starts with 'Re:'. Here, we can see that almost all email messages which do start with 'Re:' are not spam.
+
+```{r out.width='50%', fig.height=4, fig.width=9, message=FALSE, warning=FALSE, fig.cap="Exploratory Data Analysis showing a few predictor variables which show markedly different distributions for ham vs spam", fig.align="center"}
+model_df %>% 
+        ggplot()+
+        geom_bar(aes(priority, fill=class), position = "fill") + 
+        theme(legend.position = "top")-> p1
+model_df %>% 
+        ggplot()+
+        geom_bar(aes(isRe, fill=class), position = "fill") + 
+        theme(legend.position = "top") -> p2
+
+gridExtra::arrangeGrob(p1, p2, nrow = 1) %>% plot()
+```
+
+# Model Building
+
+In total, 5 models are built:
+
+1. Naive Bayes using a custom built code (following the directions in the chapter)
+1. Decision Trees (using `rpart`)
+1. Random Forests (using `randomForest`)
+1. Logistic Regression (using `glm`)
+1. Support Vector Machines (using `e1071`)
+
+While investigating the models 2-5, the packages mentioned above are used. `caret` is used for some hyper-parameter tuning. Finally, to compare all the models together, the `mlr` package is used which offers the excellent `benchmark` functionality with associated plotting and model comparison tools. 
+
+
+## Model #1: Naive Bayes
+
+```{r}
 n_ham_messages <- sum(train_df$class=="ham")
 n_spam_messages <- sum(train_df$class=="spam")
 
@@ -148,19 +404,18 @@ prob_calc_df <- training_bow %>% spread(class,n,fill=0) %>% #ham and spam column
                 log_ratio_present = log(spam_present_ratio) - log(ham_present_ratio),
                 log_ratio_absent = log(spam_absent_ratio) - log(ham_absent_ratio)
 
-        ) %>% 
+        ) %>%
         select(
                 word = bow,
                 log_ratio_present,
                 log_ratio_absent
-        ) %>% 
+        ) %>%
         mutate(log_odds_ratio = log_ratio_present +log_ratio_absent)
-prob_calc_df
 ```
 
 ```{r}
 train_bow <- prob_calc_df %>% pull(word)
-test_df <- test_df %>% 
+test_df <- test_df %>%
         mutate(log_odds_pred = map_dbl(test_df$bow, ~get_log_odds_pred(.x)),
                pred = ifelse(log_odds_pred<0,"ham","spam"))
 ```
@@ -170,11 +425,8 @@ mlr::measureMMCE(test_df$class,test_df$pred)
 mlr::measureFPR(test_df$class, test_df$pred, positive = "spam", negative = "ham")
 ```
 
-
 ```{r message=FALSE, warning=FALSE}
-library(ggthemr)
-ggthemr("fresh")
-test_df %>% 
+test_df %>%
         ggplot()+
         geom_vline(xintercept = 0,color='forestgreen',lty=2)+
         geom_density(aes(x=log_odds_pred,fill=class), alpha = 0.5)+
@@ -183,35 +435,30 @@ test_df %>%
 
 ```{r}
 get_fpr_error <- function(threshold){
-        df <- test_df %>% 
+        df <- test_df %>%
                 mutate(pred = ifelse(log_odds_pred<threshold,"ham","spam"))
         mlr::measureFPR(truth = df$class, response = df$pred, negative = "ham", positive = "spam")
 }
 get_fnr_error <- function(threshold){
-        df <- test_df %>% 
+        df <- test_df %>%
                 mutate(pred = ifelse(log_odds_pred<threshold,"ham","spam"))
         mlr::measureFNR(truth = df$class, response = df$pred, negative = "ham", positive = "spam")
-        
+
 }
-# fpr_errors <- seq(min(test_df$log_odds_pred),max(test_df$log_odds_pred),by = 0.2) %>% 
-#         purrr::map_dbl(~get_fpr_error(.x))
-# fnr_errors <- seq(min(test_df$log_odds_pred),max(test_df$log_odds_pred),by = 0.2) %>% 
-#         purrr::map_dbl(~get_fnr_error(.x))
-fpr_errors <- seq(-10,10,by = 0.01) %>%
-        purrr::map_dbl(~get_fpr_error(.x))
-fnr_errors <- seq(-10,10,by = 0.01) %>%
-        purrr::map_dbl(~get_fnr_error(.x))
+fpr_errors <- seq(-10,10,by = 0.01) %>% purrr::map_dbl(~get_fpr_error(.x))
+fnr_errors <- seq(-10,10,by = 0.01) %>% purrr::map_dbl(~get_fnr_error(.x))
 tibble(
-        threshold = seq(-10,10,by = 0.01),
+        threshold = seq(-10,10, by = 0.01),
         FPR_Error = fpr_errors,
         FNR_Error = fnr_errors
-) %>% 
-        gather(key = key, value = value, -threshold) %>% 
+        ) %>%
+        gather(key = key, value = value, -threshold) %>%
         ggplot()+
-        geom_line(aes(threshold,y=value,color=key))+
-        geom_vline(xintercept = 2.75,lty=2)
-        # scale_y_continuous(limits = c(0,0.1))
+        geom_line(aes(threshold,y=value,color=key),lwd=1)+
+        geom_vline(xintercept = 2.75,lty=2)+
+        theme(legend.position = "top")
 ```
+
 ```{r}
 tibble(
         threshold = seq(-10,10,by = 0.01),
@@ -221,151 +468,251 @@ tibble(
 ```
 
 
-<!-- PARTITIONING DATA PREP -->
 
-```{r}
-train_df = raw_df2[train_index,]
-test_df = raw_df2[-train_index,]
-```
+<!-- ######## -->
 
-```{r}
-processHeader = function(header)
-{
-  # modify the first line to create a key:value pair
-  header[1] = sub("^From", "Top-From:", header[1])
-  
-  headerMat = read.dcf(textConnection(header), all = TRUE)
-  headerVec = unlist(headerMat)
-  
-  dupKeys = sapply(headerMat, function(x) length(unlist(x)))
-  names(headerVec) = rep(colnames(headerMat), dupKeys)
-  
-  return(headerVec)
-}
-processAttach = function(body, contentType){
-
-  n = length(body)
-  boundary = get_boundary(contentType)
- 
-  bString = paste("--", boundary, sep = "")
-  bStringLocs = which(bString == body)
-  eString = paste("--", boundary, "--", sep = "")
-  eStringLoc = which(eString == body)
-  
-  if (length(eStringLoc) == 0) eStringLoc = n
-  if (length(bStringLocs) <= 1) {
-    attachLocs = NULL
-    msgLastLine = n
-    if (length(bStringLocs) == 0) bStringLocs = 0
-  } else {
-    attachLocs = c(bStringLocs[ -1 ],  eStringLoc)
-    msgLastLine = bStringLocs[2] - 1
-  }
-  
-  msg = body[ (bStringLocs[1] + 1) : msgLastLine] 
-  if ( eStringLoc < n )
-    msg = c(msg, body[ (eStringLoc + 1) : n ])
-  
-  if ( !is.null(attachLocs) ) {
-    attachLens = diff(attachLocs, lag = 1) 
-    attachTypes = mapply(function(begL, endL) {
-      CTloc = grep("^[Cc]ontent-[Tt]ype", body[ (begL + 1) : (endL - 1)])
-      if ( length(CTloc) == 0 ) {
-        MIMEType = NA
-      } else {
-        CTval = body[ begL + CTloc[1] ]
-        CTval = gsub('"', "", CTval )
-        MIMEType = sub(" *[Cc]ontent-[Tt]ype: *([^;]*);?.*", "\\1", CTval)   
-      }
-      return(MIMEType)
-    }, attachLocs[-length(attachLocs)], attachLocs[-1])
-  }
-  
-  if (is.null(attachLocs)) return(list(body = msg, attachDF = NULL) )
-  return(list(body = msg, 
-             attachDF = data.frame(aLen = attachLens, 
-                                     aType = unlist(attachTypes),
-                                     stringsAsFactors = FALSE)))                                
-}  
-get_processedHeader <- function(df){
-        df %>% 
-                mutate(header_processed = map(header,possibly(~processHeader(.x),otherwise = NA)))
-}
-get_contentTypes <- function(df){
-        df %>% 
-                mutate(content_types = map_chr(header_processed, ~.x["Content-Type"]))
-}
-get_attachInfo <- function(df){
-        df %>% 
-                mutate(attach_info = map2(.x = body,.y = content_types,.f = ~processAttach(.x, .y)[[2]]))
-}
-get_isRE <- function(df){
-        df %>% 
-                mutate(isRe = map_lgl(header_processed, ~length(grep("^[ ]*Re:", .x["Subject"]))>0))
-}
-get_numLines <- function(df){
-         df %>% 
-                mutate(numLines = map_int(body_no_attach, ~length(.x)))
-}
-get_perCapsSub <- function(df){
-        subjects <- map(df$header_processed,~.x["Subject"]) %>% 
-                unlist() %>% 
-                tm::removePunctuation()
-        perCaps <- stringr::str_count(subjects, "[A-Z]") / stringr::str_length(subjects)
-        perCaps[stringr::str_length(subjects)==0] <- 0
-        df %>% mutate(perCapsSub = perCaps)
-}
-get_perCapsSub <- function(df){
-        body <- map(train_df$body_no_attach,~paste(.x, collapse = " ")) %>% unlist()
-        body <- tm::removePunctuation(body)
-        body <- stringi::stri_enc_toutf8(body)
-        perCaps <- stringr::str_count(body, "[A-Z]") / stringr::str_length(body)
-        perCaps[stringr::str_length(subjects)==0] <- 0
-        df %>% mutate(perCapsBody = perCaps)
-}
-get_perCapsBody
-get_bodyCharCt
-get_underscore
-get_sub_excl_mark_cnt
-get_sub_ques_mark_cnt
-get_dlr_cnt
-get_priority
-get_numRecip
-get_hour
-get_sub_blank
-get_isDear
-get_isWrote
-get_avgWordLen
-```
-```{r}
-train_df <- train_df %>% 
-        get_processedHeader() %>% 
-        get_contentTypes() %>% 
-        get_attachInfo() %>% 
-        get_isRE() %>% 
-        get_numLines()
-```
+<!-- <!-- PARTITIONING DATA PREP --> -->
 
 
-# The Modeling Problem
+<!-- ```{r} -->
+<!-- keep <- c("class", -->
+<!--         "has_attach", -->
+<!--         "isRe", -->
+<!--         "numLines", -->
+<!--         "perCapsSub", -->
+<!--         "perCapsBody", -->
+<!--         "bodyCharCt", -->
+<!--         "underscore", -->
+<!--         "sub_exclMarkCnt", -->
+<!--         "sub_quesMarkCnt", -->
+<!--         "dlrCnt", -->
+<!--         "numRecip", -->
+<!--         "priority") -->
+<!-- fit_df <- model_df[,keep] -->
+<!-- model_test_df <- model_test_df[,keep] -->
+<!-- fit_df$class <- factor(fit_df$class, -->
+<!--                          levels = c("spam","ham"), -->
+<!--                          labels = c("spam","ham")) -->
+<!-- model_test_df$class <- factor(model_test_df$class, -->
+<!--                          levels = c("spam","ham"), -->
+<!--                          labels = c("spam","ham")) -->
+<!-- ``` -->
 
-# Data
+<!-- ######## -->
 
-# EDA
 
-# Model Building
+<!-- ## Model #2: Decision Tree -->
 
-## Model #1: Naive Bayes
+<!-- ```{r} -->
+<!-- library(rpart) -->
+<!-- rpFit <- rpart(formula = class~.,  -->
+<!--                data = fit_df, -->
+<!--                control = rpart.control(minsplit = 20, -->
+<!--                                        minbucket = 50, -->
+<!--                                        cp = 0.01)) -->
+<!-- rpFit -->
 
-## Model #2: Decision Tree
+<!-- rpPred <- predict(rpFit, model_test_df[,-1]) -->
+<!-- rpPredClass <- rpPred[,"spam"]>0.5 -->
+<!-- rpPredClass <- factor(rpPredClass, -->
+<!--                          levels = c(T,F), -->
+<!--                          labels = c("spam","ham")) -->
 
-## Model #3: Random Forest
+<!-- caret::confusionMatrix(rpPredClass,model_test_df$class) -->
+<!-- ``` -->
 
-## Model #4: Logistic Regression using the variable selection algorithm of your choice 
 
-## Model #5: Support Vector Machine
+<!-- ## Model #3: Random Forest -->
+
+<!-- ```{r} -->
+<!-- library(randomForest) -->
+<!-- rf_df <- fit_df %>%  -->
+<!--         mutate( -->
+<!--                 isRe = ifelse(is.na(isRe), F, isRe), -->
+<!--                 perCapsSub = ifelse(is.na(perCapsSub), 0, perCapsSub), -->
+<!--                 underscore = ifelse(is.na(underscore), F, underscore), -->
+<!--                 sub_exclMarkCnt = ifelse(is.na(sub_exclMarkCnt), 0, sub_exclMarkCnt), -->
+<!--                 sub_quesMarkCnt = ifelse(is.na(sub_quesMarkCnt), 0, sub_quesMarkCnt), -->
+<!--                 priority = ifelse(is.na(priority), 0, priority) -->
+<!--         ) -->
+<!-- rf_test_df <- model_test_df %>%  -->
+<!--         mutate( -->
+<!--                 isRe = ifelse(is.na(isRe), F, isRe), -->
+<!--                 perCapsSub = ifelse(is.na(perCapsSub), 0, perCapsSub), -->
+<!--                 underscore = ifelse(is.na(underscore), F, underscore), -->
+<!--                 sub_exclMarkCnt = ifelse(is.na(sub_exclMarkCnt),  -->
+<!--                                          0, sub_exclMarkCnt), -->
+<!--                 sub_quesMarkCnt = ifelse(is.na(sub_quesMarkCnt),  -->
+<!--                                          0, sub_quesMarkCnt), -->
+<!--                 priority = ifelse(is.na(priority), 0, priority) -->
+<!--         ) -->
+
+<!-- rfFit <- randomForest(x = rf_df[,-1], -->
+<!--                       y = rf_df$class, -->
+<!--                       ntree = 200, -->
+<!--                       mtry = 5, -->
+<!--                       xtest = rf_test_df[,-1], -->
+<!--                       ytest = rf_test_df$class, -->
+<!--                       replace = T, -->
+<!--                       importance = T) -->
+<!-- rfFit -->
+<!-- plot(rfFit) -->
+<!-- varImpPlot(rfFit) -->
+<!-- ``` -->
+
+
+<!-- ## Model #4: Logistic Regression using the variable selection algorithm of your choice  -->
+
+<!-- ```{r} -->
+<!-- library(mlr) -->
+
+<!-- svm_df <- rf_df[,-1] %>% map_df(~as.numeric(.x)) %>% cbind(class=rf_df$class,.) -->
+<!-- svm_test_df <- rf_test_df[,-1] %>% map_df(~as.numeric(.x)) %>% cbind(class=rf_test_df$class,.) -->
+
+<!-- (tsk <- makeClassifTask(id = "reduced_model", -->
+<!--                         data = svm_df[,c("has_attach", "isRe", "perCapsSub", "perCapsBody", "sub_exclMarkCnt", "numRecip", "priority", "class")], -->
+<!--                        target = "class", -->
+<!--                        positive = "spam")) -->
+<!-- (lrn <- makeLearner(cl = "classif.logreg",predict.type = "response")) -->
+<!-- (logFit <- train(lrn,tsk)) -->
+<!-- (logPreds <- predict(logFit, newdata = svm_test_df[,c("has_attach", "isRe", "perCapsSub", "perCapsBody", "sub_exclMarkCnt", "numRecip", "priority", "class")])) -->
+<!-- performance(logPreds, measures = list(mmce, fpr, fnr, kappa)) -->
+<!-- mlr::calculateConfusionMatrix(logPreds,relative = T) -->
+<!-- ``` -->
+
+<!-- ## Model #5: Support Vector Machine -->
+
+<!-- ```{r} -->
+<!-- library(mlr) -->
+
+<!-- svm_df <- rf_df[,-1] %>% map_df(~as.numeric(.x)) %>% cbind(class=rf_df$class,.) -->
+<!-- svm_test_df <- rf_test_df[,-1] %>% map_df(~as.numeric(.x)) %>% cbind(class=rf_test_df$class,.) -->
+
+<!-- tsk <- makeClassifTask(data = svm_df, -->
+<!--                        target = "class", -->
+<!--                        positive = "spam") -->
+<!-- lrn <- makeLearner(cl = "classif.svm",predict.type = "response", -->
+<!--                    par.vals = list( -->
+<!--                            kernel = "polynomial", -->
+<!--                            cost = 10, -->
+<!--                            gamma = 0.3 -->
+<!--                    )) -->
+<!-- svmFit <- train(lrn,tsk) -->
+
+<!-- rdesc = makeResampleDesc("CV", iters = 10, stratify = TRUE) -->
+<!-- resampled_svm <- resample(learner = lrn, task = tsk, resampling = rdesc) -->
+
+<!-- svmPreds <- predict(svmFit, newdata = svm_test_df) -->
+<!-- performance(svmPreds, measures = list(mmce, fpr, fnr,kappa )) -->
+<!-- mlr::calculateConfusionMatrix(svmPreds,relative = T) -->
+<!-- ``` -->
 
 
 # Model Comparison
 
-## Type I, Type II, AUC
+## Measures
+
+To compare the models against each other, three measures are considered:
+
+1. `mmce` : Mean misclassification error, defined as: mean(response != truth)
+1. `fpr` : False positive rate, defined as percentage of misclassified observations in the positive class. Also called false alarm rate or fall-out.
+1. `fnr` : False negative rate, defined as percentage of misclassified observations in the negative class.
+
+The results discussed in the model comparison below are all for the *test* portion of the hold-out resampling strategy. Finally, the models are also compared by plotting their performance on the Reciever Operating Curve (ROC) and calculating their Area Under the Curve (AUC) values.
+
+```{r}
+bmr_df <- fit_df %>%
+        mutate(
+                isRe = ifelse(is.na(isRe), F, isRe),
+                perCapsSub = ifelse(is.na(perCapsSub), 0, perCapsSub),
+                underscore = ifelse(is.na(underscore), F, underscore),
+                sub_exclMarkCnt = ifelse(is.na(sub_exclMarkCnt),
+                                         0, sub_exclMarkCnt),
+                sub_quesMarkCnt = ifelse(is.na(sub_quesMarkCnt),
+                                         0, sub_quesMarkCnt),
+                priority = ifelse(is.na(priority), 0, priority)
+        ) %>% .[,-1] %>%
+        map_df(~as.numeric(.x)) %>%
+        cbind(class=fit_df$class,.)
+
+bmr_test_df <- test_df %>%
+        mutate(
+                isRe = ifelse(is.na(isRe), F, isRe),
+                perCapsSub = ifelse(is.na(perCapsSub), 0, perCapsSub),
+                underscore = ifelse(is.na(underscore), F, underscore),
+                sub_exclMarkCnt = ifelse(is.na(sub_exclMarkCnt),
+                                         0, sub_exclMarkCnt),
+                sub_quesMarkCnt = ifelse(is.na(sub_quesMarkCnt),
+                                         0, sub_quesMarkCnt),
+                priority = ifelse(is.na(priority), 0, priority)
+        ) %>% .[,-1] %>%
+        map_df(~as.numeric(.x)) %>%
+        cbind(class=test_df$class,.)
+
+bmr_df <- bmr_df %>% bind_rows(bmr_test_df)
+
+tsk <- makeClassifTask(data = bmr_df,
+                       target = "class",
+                       positive = "spam")
+lrns <- list(
+       makeLearner(id = "svm",
+                   cl = "classif.svm",predict.type = "prob",
+                   par.vals = list(kernel = "polynomial")),
+       makeLearner(id = "logreg",
+                   cl = "classif.logreg",predict.type = "prob"),
+       makeLearner(id = "rpart",
+                   cl = "classif.rpart", predict.type = "prob"),
+       makeLearner(id = "rf",
+                   cl = "classif.randomForest",
+                   predict.type = "prob")
+)
+rdesc = makeResampleDesc(method = "Holdout",
+                         split = 0.7,
+                         stratify = TRUE)
+meas <- list(mmce, fpr, fnr)
+bmr = benchmark(lrns, tsk, rdesc, meas)
+```
+
+```{r}
+perf = getBMRPerformances(bmr, as.df = TRUE)
+df = reshape2::melt(perf, id.vars = c("task.id", "learner.id", "iter"))
+df %>%
+        ggplot()+
+        geom_line(aes(y = value, x = variable, group=learner.id, color=learner.id))+
+        geom_point(aes(x = variable, y=value, color=learner.id))+
+        labs(x="Test Set Performance Measures", y="Value")
+# qplot(y = value, data = df, x = learner.id,
+#       geom = "dotplot",color=learner.id,
+#       ylab = "performance")+
+#         scale_x_continuous(labels = NULL)+
+#         theme(axis.ticks.x = element_blank(),strip.text = element_text(size = 14))+
+#         facet_grid(~variable, scales = "free")
+```
+
+```{r}
+df_thres <- generateThreshVsPerfData(
+        list(
+                rf   = getBMRPredictions(bmr,drop = T, learner.ids = "rf"),
+                ksvm = getBMRPredictions(bmr,drop = T, learner.ids = "svm"),
+                rpart = getBMRPredictions(bmr, drop=T, learner.ids = "rpart"),
+                logreg = getBMRPredictions(bmr, drop=T, learner.ids = "logreg")),
+        measures = list(fpr, tpr))
+plotROCCurves(df_thres)
+```
+
+
+
+# Appendix
+
+train_df %>%
+get_processedHeader() %>%
+get_contentTypes() %>%
+get_attachInfo() %>%
+get_isRE() %>%
+get_numLines() %>%
+get_perCapsSub() %>%
+get_perCapsBody() %>%
+get_underscore() %>%
+get_subMarkCnts() %>%
+get_dlrCnt() %>%
+get_numRecipPriority()
